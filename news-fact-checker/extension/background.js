@@ -10,113 +10,31 @@ chrome.action.onClicked.addListener(async (tab) => {
   const supportedWebsites = ["bbc.com", "bbc.co.uk", "cnn.com", "nytimes.com", "washingtonpost.com", "wsj.com", "bloomberg.com", "ft.com", "reuters.com", "walla.co.il", "ynet.co.il", "n12.co.il", "c14.co.il", "mako.co.il"];
   
   try {
-    // Check if the URL is supported (BBC news article)
+    // Check if the URL is supported
     if (!supportedWebsites.some(website => tab.url.includes(website))) {
       console.log("Unsupported website. This extension does not work on this website.");
       await showNotification("Unsupported website", "This extension does not work on this website.");
       return;
     }
     
-    // Show loading indicator
-    await updateBadge("...", "#4285f4");
+    // Toggle sidebar via content script
+    const response = await sendMessageToTab(tab.id, { action: "toggleSidebar" });
     
-    // Ask content script to extract article content
-    const contentResponse = await sendMessageToTab(tab.id, { action: "analyze" });
-    
-    if (!contentResponse || !contentResponse.success) {
-      console.error("Failed to extract article content:", contentResponse?.error || "Unknown error");
-      await showNotification("Error", "Failed to extract article content.");
-      await updateBadge("!", "#f44336");
-      return;
-    }
-    
-    // Send article to backend for analysis
-    const article = contentResponse.article;
-    console.log("Sending article to backend for analysis:", {
-      title: article.title,
-      url: article.url,
-      contentLength: article.content.length
-    });
-    
-    // Call the API with timeout and security measures
-    let apiResponse;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      apiResponse = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        },
-        credentials: "omit", // Don't send cookies
-        body: JSON.stringify(article),
-        signal: controller.signal
+    if (!response || !response.success) {
+      console.error("Failed to toggle sidebar:", response?.error || "Unknown error");
+      // If content script is not responsive, inject it
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["lib/readability.js", "content.js"]
       });
       
-      clearTimeout(timeoutId);
-    } catch (fetchError) {
-      console.error("API fetch error:", fetchError);
-      await showNotification("API Error", "Failed to connect to the analysis server");
-      await updateBadge("!", "#f44336");
-      return;
+      // Try again to toggle sidebar
+      await sendMessageToTab(tab.id, { action: "toggleSidebar" });
     }
-    
-    if (!apiResponse.ok) {
-      const errorText = await apiResponse.text();
-      console.error("API error:", apiResponse.status, errorText);
-      await showNotification("API Error", `Failed to analyze article: ${apiResponse.status}`);
-      await updateBadge("!", "#f44336");
-      return;
-    }
-    
-    // Parse API response
-    let analysis;
-    try {
-      analysis = await apiResponse.json();
-    } catch (parseError) {
-      console.error("Error parsing API response:", parseError);
-      await showNotification("Error", "Failed to parse analysis results");
-      await updateBadge("!", "#f44336");
-      return;
-    }
-    console.log("Analysis results:", analysis);
-    
-    // Check if there are any issues
-    if (!analysis.issues || analysis.issues.length === 0) {
-      console.log("No issues found in the article");
-      await showNotification("Analysis Complete", "No potential issues found in this article.");
-      await updateBadge("0", "#4caf50");
-      return;
-    }
-    
-    // Ask content script to highlight issues
-    const highlightResponse = await sendMessageToTab(tab.id, {
-      action: "highlight",
-      issues: analysis.issues
-    });
-    
-    if (!highlightResponse || !highlightResponse.success) {
-      console.error("Failed to highlight issues:", highlightResponse?.error || "Unknown error");
-      await showNotification("Error", "Failed to highlight issues in the article.");
-      await updateBadge("!", "#f44336");
-      return;
-    }
-    
-    // Update badge with the number of issues found
-    await updateBadge(analysis.issues.length.toString(), "#f44336");
-    
-    // Show notification
-    await showNotification(
-      "Potential issues found",
-      `Found ${analysis.issues.length} potential issues in this article.`
-    );
     
   } catch (error) {
-    console.error("Error analyzing article:", error);
-    await showNotification("Error", "An error occurred while analyzing the article.");
-    await updateBadge("!", "#f44336");
+    console.error("Error toggling sidebar:", error);
+    await showNotification("Error", "An error occurred while trying to open the sidebar.");
   }
 });
 
@@ -139,7 +57,7 @@ async function showNotification(title, message) {
   if (chrome.notifications) {
     chrome.notifications.create({
       type: "basic",
-      iconUrl: "images/icon128.jpeg",
+      iconUrl: "images/icon128.png",
       title: title,
       message: message
     });

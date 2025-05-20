@@ -16,10 +16,9 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "images/icon16.jpeg",
-      "32": "images/icon32.jpeg",
-      "48": "images/icon48.jpeg",
-      "128": "images/icon128.jpeg"
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
     }
   },
   "background": {
@@ -36,7 +35,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["styles.css", "privacy_policy.html"],
+      "resources": ["sidebar.html", "sidebar.js", "sidebar.css", "styles.css", "privacy_policy.html", "images/*"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -1,6 +1,10 @@
 // Content script for TruthPilot extension
 console.log("TruthPilot content script loaded");
 
+// Variables to track sidebar state
+let sidebarFrame = null;
+let isSidebarOpen = false;
+
 // Function to extract article content using Readability
 function extractArticleContent() {
   try {
@@ -196,7 +200,84 @@ function highlightIssues(issues) {
   });
 }
 
-// Listen for messages from the background script
+// Function to create and inject the sidebar iframe
+function createSidebar() {
+  if (sidebarFrame) {
+    return; // Sidebar already exists
+  }
+  
+  // Create the iframe element
+  sidebarFrame = document.createElement('iframe');
+  sidebarFrame.src = chrome.runtime.getURL('sidebar.html');
+  sidebarFrame.id = 'truthpilot-sidebar';
+  
+  // Style the iframe
+  Object.assign(sidebarFrame.style, {
+    position: 'fixed',
+    top: '0',
+    right: '0',
+    width: '350px',
+    height: '100%',
+    zIndex: '1000000',
+    border: 'none',
+    boxShadow: '-5px 0 15px rgba(0, 0, 0, 0.2)',
+    transition: 'transform 0.3s ease'
+  });
+  
+  // Initially hide the sidebar (off-screen)
+  sidebarFrame.style.transform = 'translateX(100%)';
+  
+  // Add the iframe to the page
+  document.body.appendChild(sidebarFrame);
+  
+  // Create a style for the body padding when sidebar is open
+  const styleEl = document.createElement('style');
+  styleEl.id = 'truthpilot-sidebar-style';
+  styleEl.textContent = `
+    body.truthpilot-sidebar-open {
+      transition: padding-right 0.3s ease;
+    }
+  `;
+  document.head.appendChild(styleEl);
+  
+  return sidebarFrame;
+}
+
+// Function to show the sidebar
+function showSidebar() {
+  if (!sidebarFrame) {
+    createSidebar();
+  }
+  
+  // Show the sidebar with animation
+  setTimeout(() => {
+    sidebarFrame.style.transform = 'translateX(0)';
+    document.body.classList.add('truthpilot-sidebar-open');
+    document.body.style.paddingRight = '350px';
+    isSidebarOpen = true;
+  }, 10);
+}
+
+// Function to hide the sidebar
+function hideSidebar() {
+  if (sidebarFrame) {
+    sidebarFrame.style.transform = 'translateX(100%)';
+    document.body.classList.remove('truthpilot-sidebar-open');
+    document.body.style.paddingRight = '0';
+    isSidebarOpen = false;
+  }
+}
+
+// Function to toggle the sidebar visibility
+function toggleSidebar() {
+  if (isSidebarOpen) {
+    hideSidebar();
+  } else {
+    showSidebar();
+  }
+}
+
+// Listen for messages from the background script or popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "analyze") {
     console.log("Received analyze request");
@@ -216,6 +297,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // Highlight issues in the article
     highlightIssues(message.issues);
+    sendResponse({ success: true });
+    return true;
+  } else if (message.action === "showSidebar") {
+    console.log("Received show sidebar request");
+    showSidebar();
+    sendResponse({ success: true });
+    return true;
+  } else if (message.action === "closeSidebar") {
+    console.log("Received close sidebar request");
+    hideSidebar();
+    sendResponse({ success: true });
+    return true;
+  }
+});
+
+// Listen for the extension icon click event from background script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "toggleSidebar") {
+    toggleSidebar();
     sendResponse({ success: true });
     return true;
   }
