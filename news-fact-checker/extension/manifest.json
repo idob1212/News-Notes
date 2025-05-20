@@ -1,0 +1,43 @@
+{
+  "name": "TruthPilot",
+  "version": "1.0.0",
+  "description": "Analyzes news articles for misinformation and highlights problematic sections",
+  "manifest_version": 3,
+  "author": "TruthPilot Team",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon16.jpeg",
+      "32": "images/icon32.jpeg",
+      "48": "images/icon48.jpeg",
+      "128": "images/icon128.jpeg"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.bbc.com/*", "*://*.bbc.co.uk/*","*://*.cnn.com/*","*://*.nytimes.com/*","*://*.washingtonpost.com/*","*://*.wsj.com/*","*://*.bloomberg.com/*","*://*.ft.com/*","*://*.reuters.com/*","*://*.bloomberg.com/*","*://*.ft.com/*","*://*.reuters.com/*","*://*.bloomberg.com/*","*://*.ft.com/*","*://*.reuters.com/*",
+    "*://*.walla.co.il/*", "*://*.ynet.co.il/*", "*://*.n12.co.il/*", "*://*.c14.co.il/*", "*://*.mako.co.il/*"],
+      "js": ["lib/readability.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css", "privacy_policy.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+} 
