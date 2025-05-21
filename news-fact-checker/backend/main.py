@@ -15,6 +15,7 @@ load_dotenv()
 
 # Check if API key is available
 perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
+print(perplexity_api_key)
 if not perplexity_api_key:
     raise ValueError("PERPLEXITY_API_KEY not found in environment variables. Please add it to your .env file.")
 
@@ -57,13 +58,17 @@ async def root():
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_article(article: ArticleRequest):
     try:
+        print(f"[DEBUG] Starting analysis of article: {article.title}")
+        print(f"[DEBUG] Accessing API key: {perplexity_api_key[:4]}...") # Only show first few chars for security
         # Initialize the language model with Perplexity
+        print("[DEBUG] Initializing language model")
         llm = ChatPerplexity(
             temperature=0,
             model="sonar-pro",
             api_key=perplexity_api_key
         )
         
+        print("[DEBUG] Creating search prompt")
         # Create initial search prompt to find relevant information
         search_prompt = f"""
         I need to fact-check an article with the following content:
@@ -81,17 +86,23 @@ async def analyze_article(article: ArticleRequest):
         Return only the search queries, one per line.
         """
         
+        print("[DEBUG] Generating search queries using LLM")
         # Get search queries for key claims
         search_queries_response = llm.invoke(search_prompt)
         search_queries = search_queries_response.content.strip().split('\n')
         search_queries = [q.strip() for q in search_queries if q.strip()]
         
+        print(f"[DEBUG] Generated {len(search_queries)} search queries")
+        
         # Limit to top queries
         search_queries = search_queries[:10]
+        print(f"[DEBUG] Limited to {len(search_queries)} search queries")
         
         # Bind structured output schema to the model
+        print("[DEBUG] Binding structured output schema")
         structured_llm = llm.with_structured_output(AnalysisOutput)
         
+        print("[DEBUG] Creating fact-check prompt")
         # Create the comprehensive fact-checking prompt leveraging Perplexity's search
         fact_check_prompt = f"""
         You are an expert fact-checker reviewing news articles for potential misinformation and bias.
@@ -124,13 +135,16 @@ async def analyze_article(article: ArticleRequest):
         The key goal is to give the user context and information that will help them understand the true situation regarding the article subject.
         """
         
+        print("[DEBUG] Generating analysis with structured output")
         # Generate structured analysis using Perplexity's built-in search capability
         structured_result = structured_llm.invoke(fact_check_prompt)
         
+        print(f"[DEBUG] Analysis complete, found {len(structured_result.issues)} issues")
         return {"issues": structured_result.issues}
     
     except Exception as e:
-        print(f"Error in analyze_article: {e}")
+        print(f"[ERROR] Error in analyze_article: {e}")
+        print("[ERROR] Error occurred at:")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

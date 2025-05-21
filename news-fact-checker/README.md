@@ -45,7 +45,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 python main.py
 ```
 
-The server will start at http://localhost:8000.
+The server will start at https://news-notes.onrender.com/.
 
 ## Chrome Extension Setup
 

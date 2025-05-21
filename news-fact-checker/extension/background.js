@@ -2,7 +2,7 @@
 console.log("TruthPilot background script loaded");
 
 // Configuration
-const API_URL = "http://localhost:8000/analyze";
+const API_URL = "https://news-notes.onrender.com/analyze";
 
 // Listen for extension icon click
 chrome.action.onClicked.addListener(async (tab) => {
