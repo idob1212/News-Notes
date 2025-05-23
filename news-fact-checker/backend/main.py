@@ -15,7 +15,6 @@ load_dotenv()
 
 # Check if API key is available
 perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
-print(perplexity_api_key)
 if not perplexity_api_key:
     raise ValueError("PERPLEXITY_API_KEY not found in environment variables. Please add it to your .env file.")
 
@@ -58,93 +57,78 @@ async def root():
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_article(article: ArticleRequest):
     try:
-        print(f"[DEBUG] Starting analysis of article: {article.title}")
-        print(f"[DEBUG] Accessing API key: {perplexity_api_key[:4]}...") # Only show first few chars for security
         # Initialize the language model with Perplexity
-        print("[DEBUG] Initializing language model")
         llm = ChatPerplexity(
             temperature=0,
             model="sonar-pro",
             api_key=perplexity_api_key
         )
         
-        print("[DEBUG] Creating search prompt")
         # Create initial search prompt to find relevant information
         search_prompt = f"""
-        I need to fact-check an article with the following content:
+        I need to analyze an article and provide important context for the reader:
         
         Title: {article.title}
         
-        Please identify key claims in this article that should be fact-checked. Focus specifically on:
-        1. Potential fake news or fabricated information
-        2. Misleading ways of presenting facts
-        3. Politically biased framing of events
-        4. Omission of crucial context
-        5. Exaggerations or distortions
+        Identify key claims, assertions, and perspectives in this article that would benefit from additional context. Focus on:
+        1. Claims that may be factually incomplete or misleading
+        2. Perspectives that may present only one side of an issue
+        3. Important historical or contextual information that's missing
+        4. Statistical data or facts that should be verified
+        5. Areas where political or ideological framing affects presentation
         
-        Create specific search queries for these claims.
+        Create specific search queries that will help find factual information about these claims.
         Return only the search queries, one per line.
         """
         
-        print("[DEBUG] Generating search queries using LLM")
         # Get search queries for key claims
         search_queries_response = llm.invoke(search_prompt)
         search_queries = search_queries_response.content.strip().split('\n')
         search_queries = [q.strip() for q in search_queries if q.strip()]
         
-        print(f"[DEBUG] Generated {len(search_queries)} search queries")
         
         # Limit to top queries
-        search_queries = search_queries[:10]
-        print(f"[DEBUG] Limited to {len(search_queries)} search queries")
+        search_queries = search_queries[:30]
         
         # Bind structured output schema to the model
-        print("[DEBUG] Binding structured output schema")
         structured_llm = llm.with_structured_output(AnalysisOutput)
         
-        print("[DEBUG] Creating fact-check prompt")
         # Create the comprehensive fact-checking prompt leveraging Perplexity's search
         fact_check_prompt = f"""
-        You are an expert fact-checker reviewing news articles for potential misinformation and bias.
+        You are an impartial, truth-focused analyst helping readers get the full picture on news articles.
         
-        Analyze this article in detail:
+        Analyze this article carefully:
         
         Title: {article.title}
         URL: {article.url}
         Content: {article.content}
         
-        I need you to search the web for information related to the key claims in this article.
-        Focus on these potential search queries to verify the claims:
+        Using the web, search for factual information related to the key points in this article, using these queries:
         {' '.join(search_queries)}
         
-        Based on your search results, identify any issues in the article, focusing specifically on:
-        1. Fake news or fabricated information
-        2. Misleading presentation of facts
-        3. Political bias in framing events
-        4. Omission of crucial context
-        5. Exaggerations or distortions
+        Identify sections where additional context or factual information would help the reader understand the complete picture. Focus on:
+        1. Information gaps that could lead to misunderstanding
+        2. Areas where additional perspectives would provide balance
+        3. Missing historical or contextual facts essential to understanding
+        4. Cases where statistical data or facts need verification or clarification
+        5. Instances where bias or framing affects how information is presented
         
-        For each problematic section:
-        1. Extract the exact text that contains the issue
-        2. Provide a VERY CONCISE explanation of why it's misleading, false, or biased (maximum 3-4 lines)
+        For each identified section:
+        1. Extract the exact text that would benefit from additional context
+        2. Provide a CONCISE, fact-based explanation that gives readers the complete picture (3-4 lines maximum)
         3. Assign a confidence score (0.0-1.0) for your assessment
-        4. Include URLs of sources that contradict the claim or provide missing context
+        4. Include URLs of factual sources that provide this additional context
         
-        Remember to only identify genuine issues backed by factual evidence.
-        If there are no clear issues, return an empty list.
-        The key goal is to give the user context and information that will help them understand the true situation regarding the article subject.
+        Focus on helping readers by providing accurate, factual information that completes their understanding - not just identifying problems.
+        If there are no clear issues requiring additional context, return an empty list.
         """
         
-        print("[DEBUG] Generating analysis with structured output")
         # Generate structured analysis using Perplexity's built-in search capability
         structured_result = structured_llm.invoke(fact_check_prompt)
         
-        print(f"[DEBUG] Analysis complete, found {len(structured_result.issues)} issues")
         return {"issues": structured_result.issues}
     
     except Exception as e:
-        print(f"[ERROR] Error in analyze_article: {e}")
-        print("[ERROR] Error occurred at:")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
