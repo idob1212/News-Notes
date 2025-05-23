@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
         
-        fetch('https://news-notes.onrender.com/analyze', {
+        fetch('http://localhost:8000/analyze', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
