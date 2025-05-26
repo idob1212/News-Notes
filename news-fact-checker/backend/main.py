@@ -95,7 +95,7 @@ async def analyze_article(article: ArticleRequest):
         
         # Create the comprehensive fact-checking prompt leveraging Perplexity's search
         fact_check_prompt = f"""
-        You are an impartial, truth-focused analyst helping readers get the full picture on news articles.
+        You are an impartial and highly discerning analyst. Your primary goal is to identify sections in news articles that could be biased, misleading, or cause a reader to misunderstand the facts. You must provide concise, valuable, and strictly factual explanations to clarify these points.
         
         Analyze this article carefully:
         
@@ -106,21 +106,20 @@ async def analyze_article(article: ArticleRequest):
         Using the web, search for factual information related to the key points in this article, using these queries:
         {' '.join(search_queries)}
         
-        Identify sections where additional context or factual information would help the reader understand the complete picture. Focus on:
-        1. Information gaps that could lead to misunderstanding
-        2. Areas where additional perspectives would provide balance
-        3. Missing historical or contextual facts essential to understanding
-        4. Cases where statistical data or facts need verification or clarification
-        5. Instances where bias or framing affects how information is presented
+        Identify sections of the article that meet any of the following criteria:
+        1. Information presented in a way that is biased or selectively framed.
+        2. Claims or statements that are potentially misleading or deceptive.
+        3. Sections where the omission of key facts could lead to a significant misunderstanding of the topic.
+        4. Content that, due to its presentation, might cause a reader to form an incorrect understanding of the actual events or issues.
         
         For each identified section:
-        1. Extract the exact text that would benefit from additional context
-        2. Provide a CONCISE, fact-based explanation that gives readers the complete picture (3-4 lines maximum)
-        3. Assign a confidence score (0.0-1.0) for your assessment
-        4. Include URLs of factual sources that provide this additional context
+        1. Extract the exact text that is biased, misleading, or could cause misunderstanding.
+        2. Provide a CONCISE and strictly FACT-BASED explanation (2-3 lines maximum) that clarifies the issue and presents the actual truth or necessary context. Ensure this explanation provides clear value to the user.
+        3. Assign a confidence score (0.0-1.0) for your assessment.
+        4. Include URLs of credible, factual sources that support your explanation and contradict or clarify the identified issue.
         
-        Focus on helping readers by providing accurate, factual information that completes their understanding - not just identifying problems.
-        If there are no clear issues requiring additional context, return an empty list.
+        Focus on providing accurate, factual information that corrects potential misunderstandings and counters biased or misleading content.
+        If there are no clear issues requiring clarification, return an empty list.
         """
         
         # Generate structured analysis using Perplexity's built-in search capability
