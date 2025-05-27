@@ -120,13 +120,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add issues to the list
     issues.forEach((issue, index) => { // index here is originalIssueIndex
+      if (index === 0) { console.log('[sidebar.js] Processing first issue (original index 0):', issue.text, 'Map received:', appliedHighlightsMap); }
       const issueElement = document.createElement('div');
       issueElement.className = 'issue';
       
       // Find the first mapping for this original issue index
       const mappingEntry = appliedHighlightsMap ? appliedHighlightsMap.find(m => m.originalIssueIndex === index) : null;
+      if (index === 0) { console.log('[sidebar.js] Mapping entry for first issue:', mappingEntry); }
       
       if (mappingEntry && mappingEntry.highlightId) {
+        if (index === 0) { console.log('[sidebar.js] First issue WILL BE made clickable. highlightId:', mappingEntry.highlightId); }
         issueElement.dataset.highlightId = mappingEntry.highlightId;
         issueElement.style.cursor = 'pointer'; // Indicate it's clickable
         
@@ -145,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
       } else {
+        if (index === 0) { console.log('[sidebar.js] First issue WILL NOT be made clickable.'); }
         issueElement.classList.add('issue-not-scrollable');
       }
       
