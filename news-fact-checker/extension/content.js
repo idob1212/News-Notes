@@ -34,7 +34,7 @@ function extractArticleContent() {
 function highlightIssues(issues) {
   if (!issues || !Array.isArray(issues) || issues.length === 0) {
     console.log("No issues to highlight");
-    return;
+    return [];
   }
   
   console.log(`Highlighting ${issues.length} issues`);
@@ -92,9 +92,11 @@ function highlightIssues(issues) {
   `;
   document.head.appendChild(styleEl);
   
+  const appliedHighlightIds = [];
   // Process each issue
-  issues.forEach((issue) => {
+  issues.forEach((issue, index) => {
     try {
+      const highlightId = `truthpilot-highlight-${index}`;
       // Find all text nodes in the document
       const textNodes = [];
       const walker = document.createTreeWalker(
@@ -139,6 +141,7 @@ function highlightIssues(issues) {
           for (let i = 1; i < parts.length; i++) {
             const highlightSpan = document.createElement('span');
             highlightSpan.className = 'truthpilot-highlight';
+            highlightSpan.id = highlightId; // Set the unique ID
             highlightSpan.textContent = issue.text;
             
             // Add the tooltip
@@ -192,12 +195,16 @@ function highlightIssues(issues) {
           
           // Replace the original text node with the fragment
           parent.replaceChild(fragment, textNode);
+          if (!appliedHighlightIds.includes(highlightId)) {
+            appliedHighlightIds.push(highlightId);
+          }
         }
       });
     } catch (error) {
       console.error("Error highlighting issue:", error, issue);
     }
   });
+  return appliedHighlightIds;
 }
 
 // Function to create and inject the sidebar iframe
@@ -296,8 +303,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Received highlight request");
     
     // Highlight issues in the article
-    highlightIssues(message.issues);
-    sendResponse({ success: true });
+    const appliedHighlightIds = highlightIssues(message.issues);
+    sendResponse({ success: true, highlightIds: appliedHighlightIds });
     return true;
   } else if (message.action === "showSidebar") {
     console.log("Received show sidebar request");
@@ -309,14 +316,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     hideSidebar();
     sendResponse({ success: true });
     return true;
+  } else if (message.action === "scrollToHighlight") {
+    console.log("Received scrollToHighlight request for ID:", message.highlightId);
+    const highlightId = message.highlightId;
+    
+    if (!highlightId) {
+      sendResponse({ success: false, error: "No highlightId provided" });
+      return true;
+    }
+    
+    const element = document.getElementById(highlightId);
+    
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Briefly highlight the element to give visual feedback
+      const originalBackgroundColor = element.style.backgroundColor;
+      element.style.backgroundColor = 'rgba(255, 255, 0, 0.5)'; // Yellow highlight
+      setTimeout(() => {
+        element.style.backgroundColor = originalBackgroundColor;
+      }, 1500); // Highlight for 1.5 seconds
+      sendResponse({ success: true });
+    } else {
+      console.error("Highlight element not found for ID:", highlightId);
+      sendResponse({ success: false, error: "Highlighted element not found on page" });
+    }
+    return true;
   }
 });
 
 // Listen for the extension icon click event from background script
+// This listener should be merged with the one above to avoid issues.
+// For now, let's assume the extension structure might have specific reasons for two listeners,
+// but ideally, these would be one.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "toggleSidebar") {
     toggleSidebar();
     sendResponse({ success: true });
     return true;
   }
-}); 
+});

@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Show results
-  function showResults(issues) {
+  function showResults(issues, highlightIds) {
     status.style.display = 'none';
     resultCount.style.display = 'block';
     
@@ -119,9 +119,28 @@ document.addEventListener('DOMContentLoaded', () => {
     issueList.innerHTML = '';
     
     // Add issues to the list
-    issues.forEach(issue => {
+    issues.forEach((issue, index) => {
       const issueElement = document.createElement('div');
       issueElement.className = 'issue';
+      
+      const highlightId = highlightIds && highlightIds[index];
+      
+      if (highlightId) {
+        issueElement.dataset.highlightId = highlightId;
+        issueElement.style.cursor = 'pointer'; // Indicate it's clickable
+        issueElement.addEventListener('click', () => {
+          const currentHighlightId = issueElement.dataset.highlightId;
+          if (currentHighlightId) {
+            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+              if (tabs && tabs.length > 0) {
+                chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId });
+              } else {
+                console.error("Could not find active tab to send scrollToHighlight message.");
+              }
+            });
+          }
+        });
+      }
       
       const textElement = document.createElement('div');
       textElement.className = 'issue-text';
@@ -178,7 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const cachedResultsObj = result.cachedResults || {};
         
         if (cachedResultsObj[currentUrl]) {
-          showResults(cachedResultsObj[currentUrl]);
+          // We don't have highlightIds for cached results, so pass an empty array or undefined
+          showResults(cachedResultsObj[currentUrl], []); 
         }
       });
     });
@@ -277,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Show results in sidebar
-            showResults(data.issues);
+            showResults(data.issues, highlightResponse.highlightIds);
           });
         })
         .catch(error => {

@@ -96,8 +96,16 @@ button:disabled {
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 12px;
-  border-left: 4px solid #f44336;
+  border-left: 4px solid #f44336; /* Existing red border */
   font-size: 14px;
+  transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out, border-left-color 0.2s ease-in-out;
+}
+
+.issue:hover {
+  background-color: #f0f0f0;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  border-left-color: #1a73e8; /* Primary blue on hover */
 }
 
 .issue-text {
