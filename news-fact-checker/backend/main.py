@@ -64,6 +64,17 @@ async def analyze_article(article: ArticleRequest):
             api_key=perplexity_api_key
         )
         
+        # First, detect the language of the article
+        language_detection_prompt = f"""
+        Detect the language of this article content and respond with just the language name in English (e.g., "Spanish", "French", "German", "English", etc.):
+        
+        Title: {article.title}
+        Content: {article.content[:1000]}...
+        """
+        
+        language_response = llm.invoke(language_detection_prompt)
+        detected_language = language_response.content.strip()
+        
         # Create initial search prompt to find relevant information
         search_prompt = f"""
         I need to analyze an article and provide important context for the reader:
@@ -97,6 +108,8 @@ async def analyze_article(article: ArticleRequest):
         fact_check_prompt = f"""
         You are an impartial and highly discerning analyst. Your primary goal is to identify sections in news articles that could be biased, misleading, or cause a reader to misunderstand the facts. You must provide concise, valuable, and strictly factual explanations to clarify these points.
         
+        IMPORTANT: The article is written in {detected_language}. You MUST respond in {detected_language}. All explanations and text should be in {detected_language}.
+        
         Analyze this article carefully:
         
         Title: {article.title}
@@ -114,12 +127,14 @@ async def analyze_article(article: ArticleRequest):
         
         For each identified section:
         1. Extract the exact text that is biased, misleading, or could cause misunderstanding.
-        2. Provide a CONCISE and strictly FACT-BASED explanation (2-3 lines maximum) that clarifies the issue and presents the actual truth or necessary context. Ensure this explanation provides clear value to the user.
+        2. Provide a CONCISE and strictly FACT-BASED explanation (2-3 lines maximum) in {detected_language} that clarifies the issue and presents the actual truth or necessary context. Ensure this explanation provides clear value to the user.
         3. Assign a confidence score (0.0-1.0) for your assessment.
         4. Include URLs of credible, factual sources that support your explanation and contradict or clarify the identified issue.
         
         Focus on providing accurate, factual information that corrects potential misunderstandings and counters biased or misleading content.
         If there are no clear issues requiring clarification, return an empty list.
+        
+        Remember: ALL TEXT in your response must be in {detected_language}.
         """
         
         # Generate structured analysis using Perplexity's built-in search capability
