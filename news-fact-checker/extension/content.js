@@ -92,11 +92,11 @@ function highlightIssues(issues) {
   `;
   document.head.appendChild(styleEl);
   
-  const appliedHighlightIds = [];
+  let appliedHighlightsMap = [];
+  let highlightCount = 0;
   // Process each issue
-  issues.forEach((issue, index) => {
+  issues.forEach((issue, originalIssueIndex) => {
     try {
-      const highlightId = `truthpilot-highlight-${index}`;
       // Find all text nodes in the document
       const textNodes = [];
       const walker = document.createTreeWalker(
@@ -117,7 +117,12 @@ function highlightIssues(issues) {
           continue;
         }
         
-        if (node.textContent.includes(issue.text)) {
+        // Normalize for more robust matching
+        const normalizedIssueText = issue.text.trim().replace(/\s+/g, ' ');
+        const currentNodeText = node.textContent || ""; // Ensure not null
+        const normalizedNodeText = currentNodeText.trim().replace(/\s+/g, ' ');
+
+        if (normalizedIssueText && normalizedNodeText.includes(normalizedIssueText)) { // Check normalizedIssueText is not empty
           textNodes.push(node);
         }
       }
@@ -125,8 +130,9 @@ function highlightIssues(issues) {
       // Highlight each occurrence
       textNodes.forEach((textNode) => {
         const parent = textNode.parentNode;
-        const text = textNode.textContent;
-        const parts = text.split(issue.text);
+        // Use original node.textContent for splitting with original issue.text
+        const originalNodeTextContent = textNode.textContent || ""; 
+        const parts = originalNodeTextContent.split(issue.text);
         
         if (parts.length > 1) {
           // Create a document fragment to hold the new nodes
@@ -139,10 +145,14 @@ function highlightIssues(issues) {
           
           // Create the highlighted element
           for (let i = 1; i < parts.length; i++) {
+            const newDomId = `truthpilot-highlight-${highlightCount}`;
             const highlightSpan = document.createElement('span');
             highlightSpan.className = 'truthpilot-highlight';
-            highlightSpan.id = highlightId; // Set the unique ID
+            highlightSpan.id = newDomId; // Set the new unique DOM ID
             highlightSpan.textContent = issue.text;
+            
+            appliedHighlightsMap.push({ originalIssueIndex: originalIssueIndex, highlightId: newDomId });
+            highlightCount++;
             
             // Add the tooltip
             const tooltip = document.createElement('div');
@@ -195,16 +205,14 @@ function highlightIssues(issues) {
           
           // Replace the original text node with the fragment
           parent.replaceChild(fragment, textNode);
-          if (!appliedHighlightIds.includes(highlightId)) {
-            appliedHighlightIds.push(highlightId);
-          }
+          // No need to push to appliedHighlightIds anymore, map handles it.
         }
       });
     } catch (error) {
       console.error("Error highlighting issue:", error, issue);
     }
   });
-  return appliedHighlightIds;
+  return appliedHighlightsMap;
 }
 
 // Function to create and inject the sidebar iframe
@@ -303,8 +311,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Received highlight request");
     
     // Highlight issues in the article
-    const appliedHighlightIds = highlightIssues(message.issues);
-    sendResponse({ success: true, highlightIds: appliedHighlightIds });
+    const appliedHighlightsMap = highlightIssues(message.issues);
+    sendResponse({ success: true, appliedHighlightsMap: appliedHighlightsMap });
     return true;
   } else if (message.action === "showSidebar") {
     console.log("Received show sidebar request");

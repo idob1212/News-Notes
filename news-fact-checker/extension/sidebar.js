@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Show results
-  function showResults(issues, highlightIds) {
+  function showResults(issues, appliedHighlightsMap) {
     status.style.display = 'none';
     resultCount.style.display = 'block';
     
@@ -119,18 +119,22 @@ document.addEventListener('DOMContentLoaded', () => {
     issueList.innerHTML = '';
     
     // Add issues to the list
-    issues.forEach((issue, index) => {
+    issues.forEach((issue, index) => { // index here is originalIssueIndex
       const issueElement = document.createElement('div');
       issueElement.className = 'issue';
       
-      const highlightId = highlightIds && highlightIds[index];
+      // Find the first mapping for this original issue index
+      const mappingEntry = appliedHighlightsMap ? appliedHighlightsMap.find(m => m.originalIssueIndex === index) : null;
       
-      if (highlightId) {
-        issueElement.dataset.highlightId = highlightId;
+      if (mappingEntry && mappingEntry.highlightId) {
+        issueElement.dataset.highlightId = mappingEntry.highlightId;
         issueElement.style.cursor = 'pointer'; // Indicate it's clickable
+        
         issueElement.addEventListener('click', () => {
           const currentHighlightId = issueElement.dataset.highlightId;
-          if (currentHighlightId) {
+          // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
+          // but good for safety.
+          if (currentHighlightId) { 
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
               if (tabs && tabs.length > 0) {
                 chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId });
@@ -140,6 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
           }
         });
+      } else {
+        issueElement.classList.add('issue-not-scrollable');
       }
       
       const textElement = document.createElement('div');
@@ -197,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const cachedResultsObj = result.cachedResults || {};
         
         if (cachedResultsObj[currentUrl]) {
-          // We don't have highlightIds for cached results, so pass an empty array or undefined
+          // Pass an empty array for appliedHighlightsMap for cached results
           showResults(cachedResultsObj[currentUrl], []); 
         }
       });
@@ -297,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Show results in sidebar
-            showResults(data.issues, highlightResponse.highlightIds);
+            showResults(data.issues, highlightResponse.appliedHighlightsMap);
           });
         })
         .catch(error => {

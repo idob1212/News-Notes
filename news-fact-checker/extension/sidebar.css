@@ -108,6 +108,18 @@ button:disabled {
   border-left-color: #1a73e8; /* Primary blue on hover */
 }
 
+.issue.issue-not-scrollable {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.issue.issue-not-scrollable:hover {
+  background-color: white; /* Keep original background */
+  box-shadow: none; /* Remove shadow */
+  transform: none; /* Remove lift */
+  border-left-color: #f44336; /* Keep original red border color */
+}
+
 .issue-text {
   background-color: rgba(255, 165, 0, 0.2);
   padding: 4px;
