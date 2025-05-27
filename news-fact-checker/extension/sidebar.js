@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Show results
-  function showResults(issues) {
+  function showResults(issues, appliedHighlightsMap) {
     status.style.display = 'none';
     resultCount.style.display = 'block';
     
@@ -119,9 +119,38 @@ document.addEventListener('DOMContentLoaded', () => {
     issueList.innerHTML = '';
     
     // Add issues to the list
-    issues.forEach(issue => {
+    issues.forEach((issue, index) => { // index here is originalIssueIndex
+      if (index === 0) { console.log('[sidebar.js] Processing first issue (original index 0):', issue.text, 'Map received:', appliedHighlightsMap); }
       const issueElement = document.createElement('div');
       issueElement.className = 'issue';
+      
+      // Find the first mapping for this original issue index
+      const mappingEntry = appliedHighlightsMap ? appliedHighlightsMap.find(m => m.originalIssueIndex === index) : null;
+      if (index === 0) { console.log('[sidebar.js] Mapping entry for first issue:', mappingEntry); }
+      
+      if (mappingEntry && mappingEntry.highlightId) {
+        if (index === 0) { console.log('[sidebar.js] First issue WILL BE made clickable. highlightId:', mappingEntry.highlightId); }
+        issueElement.dataset.highlightId = mappingEntry.highlightId;
+        issueElement.style.cursor = 'pointer'; // Indicate it's clickable
+        
+        issueElement.addEventListener('click', () => {
+          const currentHighlightId = issueElement.dataset.highlightId;
+          // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
+          // but good for safety.
+          if (currentHighlightId) { 
+            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+              if (tabs && tabs.length > 0) {
+                chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId });
+              } else {
+                console.error("Could not find active tab to send scrollToHighlight message.");
+              }
+            });
+          }
+        });
+      } else {
+        if (index === 0) { console.log('[sidebar.js] First issue WILL NOT be made clickable.'); }
+        issueElement.classList.add('issue-not-scrollable');
+      }
       
       const textElement = document.createElement('div');
       textElement.className = 'issue-text';
@@ -178,7 +207,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const cachedResultsObj = result.cachedResults || {};
         
         if (cachedResultsObj[currentUrl]) {
-          showResults(cachedResultsObj[currentUrl]);
+          // Pass an empty array for appliedHighlightsMap for cached results
+          showResults(cachedResultsObj[currentUrl], []); 
         }
       });
     });
@@ -277,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Show results in sidebar
-            showResults(data.issues);
+            showResults(data.issues, highlightResponse.appliedHighlightsMap);
           });
         })
         .catch(error => {
