@@ -109,6 +109,12 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Show results
   function showResults(issues, appliedHighlightsMap) {
+    console.log('[sidebar.js] showResults called with:', {
+      issuesCount: issues.length,
+      appliedHighlightsMap: appliedHighlightsMap,
+      mapLength: appliedHighlightsMap ? appliedHighlightsMap.length : 'undefined'
+    });
+    
     status.style.display = 'none';
     resultCount.style.display = 'block';
     
@@ -120,35 +126,58 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add issues to the list
     issues.forEach((issue, index) => { // index here is originalIssueIndex
-      if (index === 0) { console.log('[sidebar.js] Processing first issue (original index 0):', issue.text, 'Map received:', appliedHighlightsMap); }
+      console.log(`[sidebar.js] Processing issue ${index}:`, {
+        text: issue.text.substring(0, 50) + '...',
+        appliedHighlightsMap: appliedHighlightsMap
+      });
+      
       const issueElement = document.createElement('div');
       issueElement.className = 'issue';
       
       // Find the first mapping for this original issue index
       const mappingEntry = appliedHighlightsMap ? appliedHighlightsMap.find(m => m.originalIssueIndex === index) : null;
-      if (index === 0) { console.log('[sidebar.js] Mapping entry for first issue:', mappingEntry); }
+      console.log(`[sidebar.js] Mapping entry for issue ${index}:`, mappingEntry);
       
       if (mappingEntry && mappingEntry.highlightId) {
-        if (index === 0) { console.log('[sidebar.js] First issue WILL BE made clickable. highlightId:', mappingEntry.highlightId); }
+        console.log(`[sidebar.js] Issue ${index} WILL BE made clickable. highlightId:`, mappingEntry.highlightId);
         issueElement.dataset.highlightId = mappingEntry.highlightId;
         issueElement.style.cursor = 'pointer'; // Indicate it's clickable
         
         issueElement.addEventListener('click', () => {
           const currentHighlightId = issueElement.dataset.highlightId;
+          console.log('[sidebar.js] Issue clicked, highlightId:', currentHighlightId);
           // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
           // but good for safety.
           if (currentHighlightId) { 
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
               if (tabs && tabs.length > 0) {
-                chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId });
+                chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId }, (response) => {
+                  if (chrome.runtime.lastError) {
+                    console.error("Error sending scrollToHighlight message:", chrome.runtime.lastError.message);
+                    // Visual feedback that click didn't work
+                    issueElement.style.background = '#ffebee';
+                    setTimeout(() => issueElement.style.background = '', 500);
+                  } else if (!response || !response.success) {
+                    console.error("ScrollToHighlight failed:", response?.error || "Unknown error");
+                    // Visual feedback that scrolling failed
+                    issueElement.style.background = '#ffebee';
+                    setTimeout(() => issueElement.style.background = '', 500);
+                  } else {
+                    // Visual feedback that click worked
+                    issueElement.style.background = '#e8f5e8';
+                    setTimeout(() => issueElement.style.background = '', 500);
+                  }
+                });
               } else {
                 console.error("Could not find active tab to send scrollToHighlight message.");
+                issueElement.style.background = '#ffebee';
+                setTimeout(() => issueElement.style.background = '', 500);
               }
             });
           }
         });
       } else {
-        if (index === 0) { console.log('[sidebar.js] First issue WILL NOT be made clickable.'); }
+        console.log(`[sidebar.js] Issue ${index} WILL NOT be made clickable.`);
         issueElement.classList.add('issue-not-scrollable');
       }
       
@@ -178,6 +207,13 @@ document.addEventListener('DOMContentLoaded', () => {
           link.textContent = url;
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
+          
+          // Ensure link is clickable
+          link.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent triggering the issue click
+            // Let the default link behavior handle the navigation
+          });
+          
           sourcesDiv.appendChild(link);
         });
         
@@ -207,8 +243,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const cachedResultsObj = result.cachedResults || {};
         
         if (cachedResultsObj[currentUrl]) {
-          // Pass an empty array for appliedHighlightsMap for cached results
-          showResults(cachedResultsObj[currentUrl], []); 
+          const cachedIssues = cachedResultsObj[currentUrl];
+          
+          // Re-highlight the issues to get the mapping for clickability
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'highlight',
+            issues: cachedIssues
+          }, highlightResponse => {
+            if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
+              console.warn('Failed to highlight cached issues on the page. Results may not be clickable.');
+              // Show results anyway, but without click functionality
+              showResults(cachedIssues, []);
+            } else {
+              // Show results with proper highlight mapping
+              showResults(cachedIssues, highlightResponse.appliedHighlightsMap);
+            }
+          });
         }
       });
     });
@@ -274,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
         
-        fetch('http://localhost:8000/analyze', {
+        fetch('https://news-notes.onrender.com/analyze', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -302,12 +352,17 @@ document.addEventListener('DOMContentLoaded', () => {
             action: 'highlight',
             issues: data.issues
           }, highlightResponse => {
-            if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
-              console.warn('Failed to highlight issues on the page.');
-            }
+            console.log('[sidebar.js] Highlight response received:', highlightResponse);
             
-            // Show results in sidebar
-            showResults(data.issues, highlightResponse.appliedHighlightsMap);
+            if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
+              console.warn('Failed to highlight issues on the page.', chrome.runtime.lastError);
+              // Show results anyway, but without click functionality  
+              showResults(data.issues, []);
+            } else {
+              console.log('[sidebar.js] Highlight successful, appliedHighlightsMap:', highlightResponse.appliedHighlightsMap);
+              // Show results in sidebar
+              showResults(data.issues, highlightResponse.appliedHighlightsMap);
+            }
           });
         })
         .catch(error => {

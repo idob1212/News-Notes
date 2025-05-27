@@ -99,9 +99,15 @@ button:disabled {
   border-left: 4px solid #f44336; /* Existing red border */
   font-size: 14px;
   transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out, border-left-color 0.2s ease-in-out;
+  position: relative;
 }
 
-.issue:hover {
+.issue[data-highlight-id]:not(.issue-not-scrollable) {
+  cursor: pointer;
+  user-select: none;
+}
+
+.issue[data-highlight-id]:not(.issue-not-scrollable):hover {
   background-color: #f0f0f0;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   transform: translateY(-2px);
@@ -173,4 +179,13 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  position: relative;
+  z-index: 10;
+}
+
+.sources a:hover {
+  background-color: #e8f0fe;
+  text-decoration: none;
 } 

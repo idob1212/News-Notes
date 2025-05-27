@@ -1,5 +1,10 @@
 // Content script for TruthPilot extension
-console.log("TruthPilot content script loaded");
+// Prevent multiple injections
+if (window.truthPilotContentLoaded) {
+  console.log("TruthPilot content script already loaded, skipping");
+} else {
+  window.truthPilotContentLoaded = true;
+  console.log("TruthPilot content script loaded");
 
 // Variables to track sidebar state
 let sidebarFrame = null;
@@ -31,6 +36,31 @@ function extractArticleContent() {
   }
 }
 
+// Function to clear existing highlights
+function clearExistingHighlights() {
+  console.log('[content.js] Clearing existing highlights');
+  
+  // Remove existing highlight elements
+  const existingHighlights = document.querySelectorAll('.truthpilot-highlight');
+  existingHighlights.forEach(highlight => {
+    const parent = highlight.parentNode;
+    if (parent) {
+      // Replace the highlight span with just its text content
+      const textNode = document.createTextNode(highlight.textContent);
+      parent.replaceChild(textNode, highlight);
+      
+      // Merge adjacent text nodes
+      parent.normalize();
+    }
+  });
+  
+  // Remove existing styles
+  const existingStyle = document.querySelector('style[data-truthpilot-highlights]');
+  if (existingStyle) {
+    existingStyle.remove();
+  }
+}
+
 // Function to highlight problematic text in the article
 function highlightIssues(issues) {
   if (!issues || !Array.isArray(issues) || issues.length === 0) {
@@ -38,10 +68,14 @@ function highlightIssues(issues) {
     return [];
   }
   
-  console.log(`Highlighting ${issues.length} issues`);
+  console.log(`[content.js] Highlighting ${issues.length} issues`);
+  
+  // Clear existing highlights first
+  clearExistingHighlights();
   
   // Add a style for the highlights
   const styleEl = document.createElement('style');
+  styleEl.setAttribute('data-truthpilot-highlights', 'true');
   styleEl.textContent = `
     .truthpilot-highlight {
       background-color: rgba(255, 165, 0, 0.3);
@@ -54,7 +88,7 @@ function highlightIssues(issues) {
       opacity: 0; /* Controlled by JS */
       width: 300px; /* Default width */
       position: absolute;
-      z-index: 1000;
+      z-index: 2147483647; /* Maximum z-index to ensure tooltip appears above everything */
       bottom: 125%; /* Position above the highlight */
       left: 50%;
       transform: translateX(-50%); /* Center tooltip */
@@ -68,6 +102,7 @@ function highlightIssues(issues) {
       font-size: 14px; /* Default font size for tooltip */
       line-height: 1.5;
       text-align: left;
+      pointer-events: auto; /* Ensure tooltip can receive clicks */
     }
     
     /* CSS hover effect will be overridden by JS, but good as a fallback or for non-JS scenarios */
@@ -136,9 +171,33 @@ function highlightIssues(issues) {
         const parent = textNode.parentNode;
         // Use original node.textContent for splitting with original issue.text
         const originalNodeTextContent = textNode.textContent || ""; 
-        const parts = originalNodeTextContent.split(issue.text);
+        
+        // Try exact match first
+        let parts = originalNodeTextContent.split(issue.text);
+        let textToHighlight = issue.text;
+        
+        if (parts.length === 1) {
+          // If exact match didn't work, try case-insensitive match
+          const lowerNodeText = originalNodeTextContent.toLowerCase();
+          const lowerIssueText = issue.text.toLowerCase();
+          const startIndex = lowerNodeText.indexOf(lowerIssueText);
+          
+          if (startIndex !== -1) {
+            const endIndex = startIndex + issue.text.length;
+            const beforeText = originalNodeTextContent.substring(0, startIndex);
+            const matchText = originalNodeTextContent.substring(startIndex, endIndex);
+            const afterText = originalNodeTextContent.substring(endIndex);
+            parts = [beforeText, afterText];
+            textToHighlight = matchText; // Use the actual matched text with original casing
+            
+            if (originalIssueIndex === 0) {
+              console.log('[content.js] Using case-insensitive match. Original issue text:', issue.text, 'Matched text:', matchText);
+            }
+          }
+        }
         
         if (parts.length > 1) {
+          console.log(`[content.js] Creating highlight for issue ${originalIssueIndex}, parts count:`, parts.length);
           // Create a document fragment to hold the new nodes
           const fragment = document.createDocumentFragment();
           
@@ -153,7 +212,7 @@ function highlightIssues(issues) {
             const highlightSpan = document.createElement('span');
             highlightSpan.className = 'truthpilot-highlight';
             highlightSpan.id = newDomId; // Set the new unique DOM ID
-            highlightSpan.textContent = issue.text;
+            highlightSpan.textContent = textToHighlight;
             
             if (originalIssueIndex === 0) { console.log('[content.js] Creating map for first issue. ID:', newDomId, 'Mapping:', { originalIssueIndex: originalIssueIndex, highlightId: newDomId }); }
             appliedHighlightsMap.push({ originalIssueIndex: originalIssueIndex, highlightId: newDomId });
@@ -222,6 +281,8 @@ function highlightIssues(issues) {
                 link.style.overflow = 'hidden'; // Keep
                 link.style.textOverflow = 'ellipsis'; // Keep
                 link.style.maxWidth = '100%'; // Keep
+                link.style.cursor = 'pointer'; // Ensure cursor shows it's clickable
+                link.style.pointerEvents = 'auto'; // Ensure link can receive clicks
 
                 link.addEventListener('mouseenter', () => link.style.textDecoration = 'underline');
                 link.addEventListener('mouseleave', () => link.style.textDecoration = 'none');
@@ -229,7 +290,16 @@ function highlightIssues(issues) {
                 // Make the link clickable by stopping event propagation from highlight span
                 link.addEventListener('click', (e) => {
                   e.stopPropagation();
+                  e.preventDefault();
+                  // Open link manually to ensure it works
+                  window.open(url, '_blank', 'noopener,noreferrer');
                 });
+                
+                // Also handle mousedown to catch any missed clicks
+                link.addEventListener('mousedown', (e) => {
+                  e.stopPropagation();
+                });
+                
                 sourcesDiv.appendChild(link);
               });
               
@@ -279,6 +349,7 @@ function highlightIssues(issues) {
       console.error("Error highlighting issue:", error, issue);
     }
   });
+  console.log(`[content.js] Finished highlighting. Applied highlights map:`, appliedHighlightsMap);
   return appliedHighlightsMap;
 }
 
@@ -375,10 +446,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true, article });
     return true;
   } else if (message.action === "highlight") {
-    console.log("Received highlight request");
+    console.log("[content.js] Received highlight request with issues:", message.issues);
     
     // Highlight issues in the article
     const appliedHighlightsMap = highlightIssues(message.issues);
+    console.log("[content.js] Returning appliedHighlightsMap:", appliedHighlightsMap);
     sendResponse({ success: true, appliedHighlightsMap: appliedHighlightsMap });
     return true;
   } else if (message.action === "showSidebar") {
@@ -389,6 +461,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.action === "closeSidebar") {
     console.log("Received close sidebar request");
     hideSidebar();
+    sendResponse({ success: true });
+    return true;
+  } else if (message.action === "toggleSidebar") {
+    console.log("Received toggle sidebar request");
+    toggleSidebar();
     sendResponse({ success: true });
     return true;
   } else if (message.action === "scrollToHighlight") {
@@ -419,14 +496,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Listen for the extension icon click event from background script
-// This listener should be merged with the one above to avoid issues.
-// For now, let's assume the extension structure might have specific reasons for two listeners,
-// but ideally, these would be one.
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "toggleSidebar") {
-    toggleSidebar();
-    sendResponse({ success: true });
-    return true;
-  }
-});
+} // End of truthPilotContentLoaded check

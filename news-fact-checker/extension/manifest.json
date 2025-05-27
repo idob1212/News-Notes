@@ -11,7 +11,7 @@
     "notifications"
   ],
   "host_permissions": [
-    "http://localhost:8000/*"
+    "https://news-notes.onrender.com/*"
   ],
   "action": {
     "default_icon": {
