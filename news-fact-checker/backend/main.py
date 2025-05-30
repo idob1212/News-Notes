@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
+from datetime import datetime # Added import
 import os
 from dotenv import load_dotenv
 from langchain_perplexity import ChatPerplexity
@@ -9,6 +10,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 import re
 import asyncio
+from pymongo import MongoClient
 
 # Load environment variables from .env file
 load_dotenv()
@@ -50,6 +52,29 @@ class ArticleRequest(BaseModel):
 class AnalysisResponse(BaseModel):
     issues: List[Issue]
 
+# Define Article Analysis Document model for storage
+class ArticleAnalysisDocument(BaseModel):
+    url: str  # Unique ID for the document
+    title: str
+    content: str
+    issues: List[Issue]
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+# MongoDB setup
+mongodb_connection_string = os.getenv("MONGODB_CONNECTION_STRING")
+if not mongodb_connection_string:
+    raise ValueError("MONGODB_CONNECTION_STRING not found in environment variables.")
+
+try:
+    mongo_client = MongoClient(mongodb_connection_string)
+    mongo_db = mongo_client.news_fact_checker_db # Or your preferred DB name
+    article_analyses_collection = mongo_db.article_analyses # Or your preferred collection name
+    # You can add a test connection here if needed, e.g., by calling mongo_client.admin.command('ping')
+    print("Successfully connected to MongoDB.")
+except Exception as e:
+    raise RuntimeError(f"Could not connect to MongoDB: {e}")
+
+
 @app.get("/")
 async def root():
     return {"message": "News Fact-Checker API"}
@@ -57,7 +82,17 @@ async def root():
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_article(article: ArticleRequest):
     try:
-        # Initialize the language model with Perplexity
+        # Check if the article analysis is already cached in MongoDB
+        cached_analysis_doc = article_analyses_collection.find_one({"url": article.url})
+
+        if cached_analysis_doc:
+            # Convert issue dicts back to Issue Pydantic models
+            issues_from_db = [Issue(**issue_data) for issue_data in cached_analysis_doc.get("issues", [])]
+            print(f"Returning cached analysis for URL: {article.url}")
+            return AnalysisResponse(issues=issues_from_db)
+
+        # If not cached, proceed with new analysis
+        print(f"No cache found for URL: {article.url}. Performing new analysis.")
         llm = ChatPerplexity(
             temperature=0,
             model="sonar-pro",
@@ -139,8 +174,24 @@ async def analyze_article(article: ArticleRequest):
         
         # Generate structured analysis using Perplexity's built-in search capability
         structured_result = structured_llm.invoke(fact_check_prompt)
+
+        # Save the new analysis to MongoDB
+        new_analysis_document = ArticleAnalysisDocument(
+            url=article.url,
+            title=article.title,
+            content=article.content, # Storing full content, consider if truncation is needed for large articles
+            issues=structured_result.issues
+        )
         
-        return {"issues": structured_result.issues}
+        try:
+            article_analyses_collection.insert_one(new_analysis_document.model_dump())
+            print(f"Successfully saved analysis for URL: {article.url} to MongoDB.")
+        except Exception as e_db:
+            print(f"Error saving analysis to MongoDB for URL {article.url}: {e_db}")
+            # Decide if you want to raise an error or just log, here we log and continue
+            # raise HTTPException(status_code=500, detail=f"Failed to save analysis to database: {e_db}")
+
+        return AnalysisResponse(issues=structured_result.issues)
     
     except Exception as e:
         import traceback
