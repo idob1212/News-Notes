@@ -1,0 +1,14 @@
+{
+  "name": "truthpilot-extension",
+  "version": "1.0.0",
+  "description": "Chrome extension for fact-checking news articles",
+  "scripts": {
+    "dev": "node switch-env.js dev",
+    "prod": "node switch-env.js prod",
+    "env": "node switch-env.js",
+    "build": "echo 'Extension ready for loading in Chrome'"
+  },
+  "keywords": ["chrome-extension", "fact-checking", "news"],
+  "author": "TruthPilot Team",
+  "license": "MIT"
+} 

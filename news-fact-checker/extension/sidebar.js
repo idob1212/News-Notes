@@ -7,6 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultCount = document.getElementById('resultCount');
   const issueList = document.getElementById('issueList');
   
+  // Get API URL from configuration
+  const API_URL = CONFIG.getApiUrl();
+  console.log(`Sidebar using API URL: ${API_URL} (Environment: ${CONFIG.ENVIRONMENT})`);
+
   // Check for user consent
   chrome.storage.local.get(['userConsent'], function(result) {
     if (!result.userConsent) {
@@ -324,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
         
-        fetch('https://news-notes.onrender.com/analyze', {
+        fetch(API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

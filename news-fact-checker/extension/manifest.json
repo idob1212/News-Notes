@@ -11,7 +11,8 @@
     "notifications"
   ],
   "host_permissions": [
-    "https://news-notes.onrender.com/*"
+    "http://localhost:8000/*",
+    "https://*.onrender.com/*"
   ],
   "action": {
     "default_icon": {
@@ -28,13 +29,13 @@
     {
       "matches": ["*://*.bbc.com/*", "*://*.bbc.co.uk/*","*://*.cnn.com/*","*://*.nytimes.com/*","*://*.washingtonpost.com/*","*://*.wsj.com/*","*://*.bloomberg.com/*","*://*.ft.com/*","*://*.reuters.com/*","*://*.bloomberg.com/*","*://*.ft.com/*","*://*.reuters.com/*","*://*.bloomberg.com/*","*://*.ft.com/*","*://*.reuters.com/*",
     "*://*.walla.co.il/*", "*://*.ynet.co.il/*", "*://*.n12.co.il/*", "*://*.c14.co.il/*", "*://*.mako.co.il/*"],
-      "js": ["lib/readability.js", "content.js"],
+      "js": ["config.js", "lib/readability.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["sidebar.html", "sidebar.js", "sidebar.css", "styles.css", "privacy_policy.html", "images/*"],
+      "resources": ["config.js", "sidebar.html", "sidebar.js", "sidebar.css", "styles.css", "privacy_policy.html", "images/*"],
       "matches": ["<all_urls>"]
     }
   ]
