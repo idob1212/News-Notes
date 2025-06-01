@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
-from datetime import datetime # Added import
+from datetime import datetime, timedelta # Added import
 import os
 from dotenv import load_dotenv
 from langchain_perplexity import ChatPerplexity
@@ -10,7 +10,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 import re
 import asyncio
-from pymongo import MongoClient
+# Replace pymongo with motor for asyncio support
+# Add 'motor' to your requirements.txt
+from motor.motor_asyncio import AsyncIOMotorClient
+import logging
+
+# Configure basic logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables from .env file
 load_dotenv()
@@ -59,20 +65,27 @@ class ArticleAnalysisDocument(BaseModel):
     content: str
     issues: List[Issue]
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    cached_at: datetime = Field(default_factory=datetime.utcnow)
 
 # MongoDB setup
+# IMPORTANT: For production, ensure an index is created on the 'url' field
+# in the 'article_analyses' collection for optimal query performance.
+# Example: db.article_analyses.createIndex({ "url": 1 })
+CACHE_EXPIRATION_DURATION = timedelta(hours=24)
 mongodb_connection_string = os.getenv("MONGODB_CONNECTION_STRING")
 if not mongodb_connection_string:
     raise ValueError("MONGODB_CONNECTION_STRING not found in environment variables.")
 
 try:
-    mongo_client = MongoClient(mongodb_connection_string)
+    mongo_client = AsyncIOMotorClient(mongodb_connection_string)
     mongo_db = mongo_client.news_fact_checker_db # Or your preferred DB name
     article_analyses_collection = mongo_db.article_analyses # Or your preferred collection name
-    # You can add a test connection here if needed, e.g., by calling mongo_client.admin.command('ping')
-    print("Successfully connected to MongoDB.")
+    # To confirm connection, you might need an async ping in an event loop,
+    # but Motor handles reconnections automatically.
+    logging.info("Successfully configured MongoDB client.")
 except Exception as e:
-    raise RuntimeError(f"Could not connect to MongoDB: {e}")
+    logging.error(f"Could not configure MongoDB client: {e}")
+    raise RuntimeError(f"Could not configure MongoDB client: {e}")
 
 
 @app.get("/")
@@ -83,16 +96,29 @@ async def root():
 async def analyze_article(article: ArticleRequest):
     try:
         # Check if the article analysis is already cached in MongoDB
-        cached_analysis_doc = article_analyses_collection.find_one({"url": article.url})
+        cached_analysis_doc = await article_analyses_collection.find_one({"url": article.url})
 
         if cached_analysis_doc:
-            # Convert issue dicts back to Issue Pydantic models
-            issues_from_db = [Issue(**issue_data) for issue_data in cached_analysis_doc.get("issues", [])]
-            print(f"Returning cached analysis for URL: {article.url}")
-            return AnalysisResponse(issues=issues_from_db)
+            cached_at = cached_analysis_doc.get("cached_at")
+            # Ensure cached_at is offset-naive before comparison if it's offset-aware
+            if isinstance(cached_at, datetime) and cached_at.tzinfo is not None:
+                cached_at = cached_at.replace(tzinfo=None)
 
-        # If not cached, proceed with new analysis
-        print(f"No cache found for URL: {article.url}. Performing new analysis.")
+            if cached_at and (datetime.utcnow() - cached_at) <= CACHE_EXPIRATION_DURATION:
+                # Convert issue dicts back to Issue Pydantic models
+                issues_from_db = [Issue(**issue_data) for issue_data in cached_analysis_doc.get("issues", [])]
+                logging.info(f"Returning valid cached analysis for URL: {article.url}")
+                return AnalysisResponse(issues=issues_from_db)
+            else:
+                if cached_at:
+                    logging.info(f"Stale cache found for URL: {article.url}. Proceeding with new analysis.")
+                else:
+                    # This case handles documents cached before `cached_at` was introduced.
+                    logging.info(f"Cache found without 'cached_at' for URL: {article.url}. Proceeding with new analysis.")
+
+
+        # If not cached or cache is stale, proceed with new analysis
+        logging.info(f"Performing new analysis for URL: {article.url}.")
         llm = ChatPerplexity(
             temperature=0,
             model="sonar-pro",
@@ -107,7 +133,7 @@ async def analyze_article(article: ArticleRequest):
         Content: {article.content[:1000]}...
         """
         
-        language_response = llm.invoke(language_detection_prompt)
+        language_response = await llm.ainvoke(language_detection_prompt)
         detected_language = language_response.content.strip()
         
         # Create initial search prompt to find relevant information
@@ -128,7 +154,7 @@ async def analyze_article(article: ArticleRequest):
         """
         
         # Get search queries for key claims
-        search_queries_response = llm.invoke(search_prompt)
+        search_queries_response = await llm.ainvoke(search_prompt)
         search_queries = search_queries_response.content.strip().split('\n')
         search_queries = [q.strip() for q in search_queries if q.strip()]
         
@@ -162,7 +188,7 @@ async def analyze_article(article: ArticleRequest):
         
         For each identified section:
         1. Extract the exact text that is biased, misleading, or could cause misunderstanding.
-        2. Provide a CONCISE and strictly FACT-BASED explanation (2-3 lines maximum) in {detected_language} that clarifies the issue and presents the actual truth or necessary context. Ensure this explanation provides clear value to the user.
+        2. Provide a CONCISE and strictly FACT-BASED explanation (2-3 lines maximum) in {detected_language}. This explanation must clarify *why* the text is an issue (e.g., lacks context, is misleading, disputed fact) and briefly state the *implication* for the reader or the actual truth/context. Ensure this provides clear, actionable value to the user.
         3. Assign a confidence score (0.0-1.0) for your assessment.
         4. Include URLs of credible, factual sources that support your explanation and contradict or clarify the identified issue.
         
@@ -173,28 +199,37 @@ async def analyze_article(article: ArticleRequest):
         """
         
         # Generate structured analysis using Perplexity's built-in search capability
-        structured_result = structured_llm.invoke(fact_check_prompt)
+        structured_result = await structured_llm.ainvoke(fact_check_prompt)
 
         # Save the new analysis to MongoDB
-        new_analysis_document = ArticleAnalysisDocument(
-            url=article.url,
-            title=article.title,
-            content=article.content, # Storing full content, consider if truncation is needed for large articles
-            issues=structured_result.issues
-        )
-        
+        new_analysis_data = {
+            "url": article.url,
+            "title": article.title,
+            "content": article.content, # Storing full content, consider if truncation is needed for large articles
+            "issues": [issue.model_dump() for issue in structured_result.issues], # Ensure issues are dicts
+            "cached_at": datetime.utcnow() # Explicitly set/update cached_at
+        }
+
+        # If an old document exists (stale or pre-cached_at), update it. Otherwise, insert new.
+        update_options = {"upsert": True}
         try:
-            article_analyses_collection.insert_one(new_analysis_document.model_dump())
-            print(f"Successfully saved analysis for URL: {article.url} to MongoDB.")
+            await article_analyses_collection.update_one(
+                {"url": article.url},
+                {"$set": new_analysis_data},
+                upsert=True
+            )
+            logging.info(f"Successfully saved/updated analysis for URL: {article.url} to MongoDB.")
         except Exception as e_db:
-            print(f"Error saving analysis to MongoDB for URL {article.url}: {e_db}")
+            logging.error(f"Error saving/updating analysis to MongoDB for URL {article.url}: {e_db}")
             # Decide if you want to raise an error or just log, here we log and continue
             # raise HTTPException(status_code=500, detail=f"Failed to save analysis to database: {e_db}")
 
+        # Return the new/updated issues
         return AnalysisResponse(issues=structured_result.issues)
     
     except Exception as e:
         import traceback
+        logging.error(f"Unhandled error in analyze_article for URL {article.url if article else 'Unknown'}: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
