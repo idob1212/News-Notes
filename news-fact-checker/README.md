@@ -35,10 +35,19 @@ source venv/bin/activate  # On Windows, use: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file with your OpenAI API key:
+4. Create a `.env` file with your API keys:
 ```
 OPENAI_API_KEY=your_openai_api_key_here
+PERPLEXITY_API_KEY=your_perplexity_api_key_here
+YOU_API_KEY=your_you_api_key_here
+MONGODB_CONNECTION_STRING=your_mongodb_connection_string_here
 ```
+   - `OPENAI_API_KEY`: Used for OpenAI services (if still applicable).
+   - `PERPLEXITY_API_KEY`: Used for Perplexity AI services (currently not the primary analysis provider).
+   - `YOU_API_KEY`: Required for the you.com API integration. The backend uses this key to interact with the You.com Research API via a custom Langchain LLM wrapper (`news-fact-checker/backend/you_langchain_wrapper.py`). This integration leverages Langchain for prompt management and structured output parsing from the API.
+   - `MONGODB_CONNECTION_STRING`: Required to connect to your MongoDB instance for caching analysis results.
+
+   The project uses `langchain` (already listed in `requirements.txt`) to orchestrate interactions with language models.
 
 5. Start the backend server:
 ```
@@ -65,13 +74,16 @@ The server will start at https://news-notes.onrender.com/.
 
 ## How It Works
 
-The fact-checker uses OpenAI's web search tool to verify claims in real-time:
-
-1. The article content is sent to the backend
-2. The backend uses OpenAI's LLM with the web_search_preview tool
-3. The LLM searches the web for information to verify claims
-4. Misleading statements are identified with explanations and source URLs
-5. Results are returned to the extension for display
+The core analysis is performed by the backend:
+1. Article content is sent from the Chrome extension to the backend.
+2. The backend utilizes the You.com Research API, accessed via a custom Langchain LLM wrapper (`YouChatLLM`).
+3. Langchain is used to:
+    - Construct a detailed prompt for the You.com API, instructing it to analyze the article for inaccuracies, bias, or misleading statements.
+    - Request a structured JSON output from the API.
+    - Parse this JSON output into Pydantic models.
+4. Identified issues (problematic text, explanation, source URLs, confidence score) are returned to the extension.
+5. The extension then highlights these issues on the web page.
+6. Caching is implemented using MongoDB to store analysis results and avoid re-processing identical articles.
 
 ## Extending the Extension
 
@@ -86,5 +98,6 @@ MIT
 ## Acknowledgments
 
 - Uses [Mozilla's Readability.js](https://github.com/mozilla/readability) for article extraction
-- Powered by OpenAI's language models via LangChain
-- Web search functionality provided by OpenAI's web_search_preview tool 
+- Core analysis powered by the You.com Research API.
+- Orchestration and interaction with the API is managed using the Langchain framework.
+- Uses [Mozilla's Readability.js](https://github.com/mozilla/readability) for article extraction in the extension.

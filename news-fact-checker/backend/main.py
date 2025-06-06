@@ -6,12 +6,17 @@ from datetime import datetime # Added import
 import os
 import time
 from dotenv import load_dotenv
-from langchain_perplexity import ChatPerplexity
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.documents import Document
-import re
-import asyncio
+# import requests # No longer directly used for You.com call
+# from langchain_perplexity import ChatPerplexity # Removed
+# from langchain_core.prompts import ChatPromptTemplate # Will be replaced by new PromptTemplate
+# from langchain_core.documents import Document # Removed
+import re # Keep for now, might be used by other parts or future parsing
+import asyncio # Keep for now, might be used by other parts
 from pymongo import MongoClient
+
+from .you_langchain_wrapper import YouChatLLM
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,6 +25,10 @@ load_dotenv()
 perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
 if not perplexity_api_key:
     raise ValueError("PERPLEXITY_API_KEY not found in environment variables. Please add it to your .env file.")
+
+you_api_key = os.getenv("YOU_API_KEY")
+if not you_api_key:
+    raise ValueError("YOU_API_KEY not found in environment variables. Please add it to your .env file.")
 
 app = FastAPI()
 
@@ -96,97 +105,79 @@ async def analyze_article(article: ArticleRequest):
             print(f"Returning cached analysis for URL: {article.url} (took {time.time() - start_time:.2f} seconds)")
             return AnalysisResponse(issues=issues_from_db)
 
-        # If not cached, proceed with new analysis
-        print(f"No cache found for URL: {article.url}. Performing new analysis.")
-        llm = ChatPerplexity(
-            temperature=0,
-            model="sonar-pro",
-            api_key=perplexity_api_key
+        # If not cached, proceed with new analysis using Langchain and YouChatLLM
+        print(f"No cache found for URL: {article.url}. Performing new analysis with You.com (Langchain).")
+
+        you_llm = YouChatLLM() # YOU_API_KEY loaded by wrapper from env
+        output_parser = PydanticOutputParser(pydantic_object=AnalysisOutput)
+
+        prompt_template_str = """
+Analyze the following article to identify any misleading statements, factual inaccuracies, or biased reporting.
+For each identified issue, please provide:
+1. The exact text segment from the article that contains the issue. Call this field 'text'.
+2. A concise explanation of why this segment is problematic. Call this field 'explanation'.
+3. A list of URLs to credible sources that support your explanation. Call this field 'source_urls'.
+4. A confidence score (0.0-1.0) for your assessment. Call this field 'confidence_score'. If not directly calculable, use 1.0 for high confidence findings.
+
+Article Title: {article_title}
+Article URL: {article_url}
+Article Content:
+{article_content}
+
+{format_instructions}
+
+Ensure your entire response is a single JSON object matching the Pydantic schema provided in the format instructions.
+If no issues are found, the "issues" list should be empty.
+"""
+        # Added article_url to input_variables and prompt
+        prompt = PromptTemplate(
+            template=prompt_template_str,
+            input_variables=["article_title", "article_content", "article_url"],
+            partial_variables={"format_instructions": output_parser.get_format_instructions()},
         )
+
+        chain = prompt | you_llm | output_parser
         
-        print(f"[DEBUG] Starting language detection...")
-        # First, detect the language of the article
-        language_detection_prompt = f"""
-        Detect the language of this article content and respond with just the language name in English (e.g., "Spanish", "French", "German", "English", etc.):
-        
-        Title: {article.title}
-        Content: {article.content[:1000]}...
-        """
-        
-        language_response = llm.invoke(language_detection_prompt)
-        detected_language = language_response.content.strip()
-        print(f"[DEBUG] Detected language: {detected_language}")
-        
-        print(f"[DEBUG] Generating search queries...")
-        # Create initial search prompt to find relevant information
-        search_prompt = f"""
-        I need to analyze an article and provide important context for the reader:
-        
-        Title: {article.title}
-        
-        Identify key claims, assertions, and perspectives in this article that would benefit from additional context. Focus on:
-        1. Claims that may be factually incomplete or misleading
-        2. Perspectives that may present only one side of an issue
-        3. Important historical or contextual information that's missing
-        4. Statistical data or facts that should be verified
-        5. Areas where political or ideological framing affects presentation
-        
-        Create specific search queries that will help find factual information about these claims.
-        Return only the search queries, one per line.
-        """
-        
-        # Get search queries for key claims
-        search_queries_response = llm.invoke(search_prompt)
-        search_queries = search_queries_response.content.strip().split('\n')
-        search_queries = [q.strip() for q in search_queries if q.strip()]
-        
-        
-        # Limit to top queries - reduced from 30 to 5 for faster processing
-        search_queries = search_queries[:5]
-        print(f"[DEBUG] Generated {len(search_queries)} search queries")
-        
-        # Bind structured output schema to the model
-        structured_llm = llm.with_structured_output(AnalysisOutput)
-        
-        print(f"[DEBUG] Starting fact-checking analysis...")
-        # Create the comprehensive fact-checking prompt leveraging Perplexity's search
-        fact_check_prompt = f"""
-        You are an impartial and highly discerning analyst. Your primary goal is to identify sections in news articles that could be biased, misleading, or cause a reader to misunderstand the facts. You must provide concise, valuable, and strictly factual explanations to clarify these points.
-        
-        IMPORTANT: The article is written in {detected_language}. You MUST respond in {detected_language}. All explanations and text should be in {detected_language}.
-        
-        Analyze this article carefully:
-        
-        Title: {article.title}
-        URL: {article.url}
-        Content: {article.content}
-        
-        Using the web, search for factual information related to the key points in this article, using these queries:
-        {' '.join(search_queries)}
-        
-        Identify sections of the article that meet any of the following criteria:
-        1. Information presented in a way that is biased or selectively framed.
-        2. Claims or statements that are potentially misleading or deceptive.
-        3. Sections where the omission of key facts could lead to a significant misunderstanding of the topic.
-        4. Content that, due to its presentation, might cause a reader to form an incorrect understanding of the actual events or issues.
-        
-        For each identified section:
-        1. Extract the exact text that is biased, misleading, or could cause misunderstanding.
-        2. Provide a CONCISE and strictly FACT-BASED explanation (2-3 lines maximum) in {detected_language} that clarifies the issue and presents the actual truth or necessary context. Ensure this explanation provides clear value to the user.
-        3. Assign a confidence score (0.0-1.0) for your assessment.
-        4. Include URLs of credible, factual sources that support your explanation and contradict or clarify the identified issue.
-        
-        Focus on providing accurate, factual information that corrects potential misunderstandings and counters biased or misleading content.
-        If there are no clear issues requiring clarification, return an empty list.
-        
-        Remember: ALL TEXT in your response must be in {detected_language}.
-        """
-        
-        # Generate structured analysis using Perplexity's built-in search capability
-        structured_result = structured_llm.invoke(fact_check_prompt)
-        print(f"[DEBUG] Analysis completed, found {len(structured_result.issues)} issues")
+        structured_result: Optional[AnalysisOutput] = None
+        try:
+            print(f"[DEBUG] Sending request to You.com API via Langchain wrapper for URL: {article.url}")
+            structured_result = chain.invoke({
+                "article_title": article.title,
+                "article_content": article.content,
+                "article_url": article.url # Added URL to the invocation
+            })
+            # The PydanticOutputParser now directly creates Issue objects with confidence_score from the LLM
+            # if the LLM provides it. If not, the Pydantic model's default will be used.
+            # We need to ensure the prompt asks for confidence_score and the Pydantic model Issue handles it.
+            # The 'Issue' model already has 'confidence_score'. The prompt now asks for it.
+            # If the LLM doesn't return it, PydanticOutputParser might fail if 'confidence_score' is not Optional or has no default.
+            # The Issue model has: confidence_score: float = Field(description="...")
+            # This means it's required. The prompt now explicitly asks for it.
+
+            print(f"[DEBUG] Analysis with You.com (Langchain) completed, found {len(structured_result.issues)} issues")
+
+        except Exception as e:
+            # Catch errors from the chain invocation (e.g., API errors from YouChatLLM, parsing errors)
+            import traceback
+            traceback.print_exc()
+            error_message = f"Error during analysis with You.com (Langchain): {str(e)}"
+            print(f"[ERROR] {error_message}")
+            # Check if the error from YouChatLLM is one of our custom-raised ones to set status code
+            if "timed out" in str(e).lower():
+                 raise HTTPException(status_code=504, detail=error_message)
+            elif "error communicating" in str(e).lower(): # Matches ConnectionError message from wrapper
+                 raise HTTPException(status_code=502, detail=error_message)
+            else: # Generic error from chain (e.g. Pydantic parsing if LLM output is bad)
+                 raise HTTPException(status_code=500, detail=error_message)
+
 
         # Save the new analysis to MongoDB
+        # Ensure structured_result is not None if an error occurred before its assignment
+        if structured_result is None:
+             # This case should ideally be caught by the exception block above and re-raised.
+             # If it somehow gets here, it means an unhandled path.
+             raise HTTPException(status_code=500, detail="Analysis failed to produce a result.")
+
         new_analysis_document = ArticleAnalysisDocument(
             url=article.url,
             title=article.title,
