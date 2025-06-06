@@ -1,0 +1,16 @@
+{
+  "name": "truthpilot-extension",
+  "version": "1.0.0",
+  "description": "Environment management for TruthPilot Extension",
+  "scripts": {
+    "dev": "node switch-env.js dev",
+    "prod": "node switch-env.js prod",
+    "switch:dev": "node switch-env.js dev",
+    "switch:prod": "node switch-env.js prod",
+    "build:dev": "npm run dev && echo 'Extension configured for development'",
+    "build:prod": "npm run prod && echo 'Extension configured for production'"
+  },
+  "keywords": ["chrome-extension", "environment", "configuration"],
+  "author": "TruthPilot Team",
+  "license": "MIT"
+} 

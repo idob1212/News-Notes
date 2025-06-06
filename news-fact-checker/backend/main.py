@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime # Added import
 import os
+import time
 from dotenv import load_dotenv
 from langchain_perplexity import ChatPerplexity
 from langchain_core.prompts import ChatPromptTemplate
@@ -81,14 +82,18 @@ async def root():
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_article(article: ArticleRequest):
+    start_time = time.time()
+    
     try:
+        print(f"[DEBUG] Starting analysis for URL: {article.url}")
+        
         # Check if the article analysis is already cached in MongoDB
         cached_analysis_doc = article_analyses_collection.find_one({"url": article.url})
 
         if cached_analysis_doc:
             # Convert issue dicts back to Issue Pydantic models
             issues_from_db = [Issue(**issue_data) for issue_data in cached_analysis_doc.get("issues", [])]
-            print(f"Returning cached analysis for URL: {article.url}")
+            print(f"Returning cached analysis for URL: {article.url} (took {time.time() - start_time:.2f} seconds)")
             return AnalysisResponse(issues=issues_from_db)
 
         # If not cached, proceed with new analysis
@@ -99,6 +104,7 @@ async def analyze_article(article: ArticleRequest):
             api_key=perplexity_api_key
         )
         
+        print(f"[DEBUG] Starting language detection...")
         # First, detect the language of the article
         language_detection_prompt = f"""
         Detect the language of this article content and respond with just the language name in English (e.g., "Spanish", "French", "German", "English", etc.):
@@ -109,7 +115,9 @@ async def analyze_article(article: ArticleRequest):
         
         language_response = llm.invoke(language_detection_prompt)
         detected_language = language_response.content.strip()
+        print(f"[DEBUG] Detected language: {detected_language}")
         
+        print(f"[DEBUG] Generating search queries...")
         # Create initial search prompt to find relevant information
         search_prompt = f"""
         I need to analyze an article and provide important context for the reader:
@@ -133,12 +141,14 @@ async def analyze_article(article: ArticleRequest):
         search_queries = [q.strip() for q in search_queries if q.strip()]
         
         
-        # Limit to top queries
-        search_queries = search_queries[:30]
+        # Limit to top queries - reduced from 30 to 5 for faster processing
+        search_queries = search_queries[:5]
+        print(f"[DEBUG] Generated {len(search_queries)} search queries")
         
         # Bind structured output schema to the model
         structured_llm = llm.with_structured_output(AnalysisOutput)
         
+        print(f"[DEBUG] Starting fact-checking analysis...")
         # Create the comprehensive fact-checking prompt leveraging Perplexity's search
         fact_check_prompt = f"""
         You are an impartial and highly discerning analyst. Your primary goal is to identify sections in news articles that could be biased, misleading, or cause a reader to misunderstand the facts. You must provide concise, valuable, and strictly factual explanations to clarify these points.
@@ -174,6 +184,7 @@ async def analyze_article(article: ArticleRequest):
         
         # Generate structured analysis using Perplexity's built-in search capability
         structured_result = structured_llm.invoke(fact_check_prompt)
+        print(f"[DEBUG] Analysis completed, found {len(structured_result.issues)} issues")
 
         # Save the new analysis to MongoDB
         new_analysis_document = ArticleAnalysisDocument(
@@ -191,11 +202,15 @@ async def analyze_article(article: ArticleRequest):
             # Decide if you want to raise an error or just log, here we log and continue
             # raise HTTPException(status_code=500, detail=f"Failed to save analysis to database: {e_db}")
 
+        total_time = time.time() - start_time
+        print(f"[DEBUG] Total analysis time: {total_time:.2f} seconds")
         return AnalysisResponse(issues=structured_result.issues)
     
     except Exception as e:
         import traceback
         traceback.print_exc()
+        total_time = time.time() - start_time
+        print(f"[ERROR] Analysis failed after {total_time:.2f} seconds: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
