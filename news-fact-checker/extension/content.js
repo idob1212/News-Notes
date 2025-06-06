@@ -42,6 +42,7 @@ function clearExistingHighlights() {
   
   // Remove existing highlight elements
   const existingHighlights = document.querySelectorAll('.truthpilot-highlight');
+  console.log('[content.js] Found', existingHighlights.length, 'existing highlights to remove');
   existingHighlights.forEach(highlight => {
     const parent = highlight.parentNode;
     if (parent) {
@@ -58,21 +59,41 @@ function clearExistingHighlights() {
   const existingStyle = document.querySelector('style[data-truthpilot-highlights]');
   if (existingStyle) {
     existingStyle.remove();
+    console.log('[content.js] Removed existing highlight styles');
   }
+  
+  console.log('[content.js] Finished clearing existing highlights');
 }
 
 // Function to highlight problematic text in the article
 function highlightIssues(issues) {
   if (!issues || !Array.isArray(issues) || issues.length === 0) {
-    console.log("No issues to highlight");
+    console.log("[content.js] No issues to highlight");
     return [];
   }
   
-  console.log(`[content.js] Highlighting ${issues.length} issues`);
+  console.log(`[content.js] Starting to highlight ${issues.length} issues`);
   
   // Clear existing highlights first
   clearExistingHighlights();
   
+  // Add a small delay to ensure DOM is fully processed after clearing
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      try {
+        const appliedHighlightsMap = performHighlighting(issues);
+        console.log(`[content.js] Finished highlighting. Applied highlights map:`, appliedHighlightsMap);
+        resolve(appliedHighlightsMap);
+      } catch (error) {
+        console.error("[content.js] Error in performHighlighting:", error);
+        resolve([]);
+      }
+    }, 100); // 100ms delay
+  });
+}
+
+// Extracted highlighting logic into a separate function
+function performHighlighting(issues) {
   // Add a style for the highlights
   const styleEl = document.createElement('style');
   styleEl.setAttribute('data-truthpilot-highlights', 'true');
@@ -349,7 +370,6 @@ function highlightIssues(issues) {
       console.error("Error highlighting issue:", error, issue);
     }
   });
-  console.log(`[content.js] Finished highlighting. Applied highlights map:`, appliedHighlightsMap);
   return appliedHighlightsMap;
 }
 
@@ -448,10 +468,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else if (message.action === "highlight") {
     console.log("[content.js] Received highlight request with issues:", message.issues);
     
-    // Highlight issues in the article
-    const appliedHighlightsMap = highlightIssues(message.issues);
-    console.log("[content.js] Returning appliedHighlightsMap:", appliedHighlightsMap);
-    sendResponse({ success: true, appliedHighlightsMap: appliedHighlightsMap });
+    // Ensure DOM is ready before highlighting
+    if (document.readyState === 'loading') {
+      console.log("[content.js] DOM not ready, waiting for DOMContentLoaded...");
+      document.addEventListener('DOMContentLoaded', async () => {
+        try {
+          const appliedHighlightsMap = await highlightIssues(message.issues);
+          console.log("[content.js] Highlighting completed after DOM ready. Returning appliedHighlightsMap:", appliedHighlightsMap);
+          sendResponse({ success: true, appliedHighlightsMap: appliedHighlightsMap });
+        } catch (error) {
+          console.error("[content.js] Error during highlighting after DOM ready:", error);
+          sendResponse({ success: false, error: error.message, appliedHighlightsMap: [] });
+        }
+      });
+    } else {
+      // Use async/await to handle the Promise returned by highlightIssues
+      highlightIssues(message.issues).then(appliedHighlightsMap => {
+        console.log("[content.js] Highlighting completed. Returning appliedHighlightsMap:", appliedHighlightsMap);
+        sendResponse({ success: true, appliedHighlightsMap: appliedHighlightsMap });
+      }).catch(error => {
+        console.error("[content.js] Error during highlighting:", error);
+        sendResponse({ success: false, error: error.message, appliedHighlightsMap: [] });
+      });
+    }
     return true;
   } else if (message.action === "showSidebar") {
     console.log("Received show sidebar request");

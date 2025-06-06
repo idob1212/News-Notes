@@ -1,4 +1,61 @@
 // Sidebar script for TruthPilot extension
+
+// Configuration will be loaded from the extension context
+let TruthPilotConfig = null;
+
+// Load configuration - either from window global or fallback to inline config
+function loadConfig() {
+  if (window.TruthPilotConfig) {
+    TruthPilotConfig = window.TruthPilotConfig;
+    return TruthPilotConfig;
+  }
+  
+  // Fallback: inline config if not available globally
+  TruthPilotConfig = {
+    // Set this to 'development' or 'production'
+    ENVIRONMENT: 'development', // Change this to 'production' for prod builds
+    
+    // Environment-specific configurations
+    environments: {
+      development: {
+        API_BASE_URL: 'http://localhost:8000',
+        API_ENDPOINT: 'http://localhost:8000/analyze'
+      },
+      production: {
+        API_BASE_URL: 'https://your-app.onrender.com', // Replace with your actual Render URL
+        API_ENDPOINT: 'https://your-app.onrender.com/analyze'
+      }
+    },
+    
+    // Get current environment config
+    get current() {
+      return this.environments[this.ENVIRONMENT];
+    },
+    
+    // Helper methods
+    getApiUrl() {
+      return this.current.API_ENDPOINT;
+    },
+    
+    getBaseUrl() {
+      return this.current.API_BASE_URL;
+    },
+    
+    isDevelopment() {
+      return this.ENVIRONMENT === 'development';
+    },
+    
+    isProduction() {
+      return this.ENVIRONMENT === 'production';
+    }
+  };
+  
+  // Make it available globally
+  window.TruthPilotConfig = TruthPilotConfig;
+  
+  return TruthPilotConfig;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const analyzeBtn = document.getElementById('analyzeBtn');
   const closeBtn = document.getElementById('closeBtn');
@@ -6,6 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const results = document.getElementById('results');
   const resultCount = document.getElementById('resultCount');
   const issueList = document.getElementById('issueList');
+  
+  // Load configuration
+  const config = loadConfig();
+  
+  // Log current environment
+  console.log(`TruthPilot sidebar running in ${config.ENVIRONMENT} mode`);
+  console.log(`API URL: ${config.getApiUrl()}`);
   
   // Check for user consent
   chrome.storage.local.get(['userConsent'], function(result) {
@@ -127,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add issues to the list
     issues.forEach((issue, index) => { // index here is originalIssueIndex
       console.log(`[sidebar.js] Processing issue ${index}:`, {
-        text: issue.text.substring(0, 50) + '...',
+        text: issue.text.substring(0, 100) + '...',
         appliedHighlightsMap: appliedHighlightsMap
       });
       
@@ -237,6 +301,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load cached results for the current URL
   function loadCachedResults() {
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      if (!tabs || tabs.length === 0) {
+        console.warn('No active tab found for loading cached results');
+        return;
+      }
+      
       const currentUrl = tabs[0].url;
       
       chrome.storage.local.get(['cachedResults'], function(result) {
@@ -244,21 +313,32 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (cachedResultsObj[currentUrl]) {
           const cachedIssues = cachedResultsObj[currentUrl];
+          console.log('[sidebar.js] Found cached results for URL:', currentUrl, 'Issues count:', cachedIssues.length);
           
-          // Re-highlight the issues to get the mapping for clickability
-          chrome.tabs.sendMessage(tabs[0].id, {
-            action: 'highlight',
-            issues: cachedIssues
-          }, highlightResponse => {
-            if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
-              console.warn('Failed to highlight cached issues on the page. Results may not be clickable.');
-              // Show results anyway, but without click functionality
-              showResults(cachedIssues, []);
-            } else {
-              // Show results with proper highlight mapping
-              showResults(cachedIssues, highlightResponse.appliedHighlightsMap);
-            }
-          });
+          // Add a delay to ensure content script is fully loaded
+          setTimeout(() => {
+            // Re-highlight the issues to get the mapping for clickability
+            chrome.tabs.sendMessage(tabs[0].id, {
+              action: 'highlight',
+              issues: cachedIssues
+            }, highlightResponse => {
+              if (chrome.runtime.lastError) {
+                console.warn('Failed to send highlight message to content script:', chrome.runtime.lastError.message);
+                // Show results anyway, but without click functionality
+                showResults(cachedIssues, []);
+              } else if (!highlightResponse || !highlightResponse.success) {
+                console.warn('Content script failed to highlight cached issues. Response:', highlightResponse);
+                // Show results anyway, but without click functionality
+                showResults(cachedIssues, []);
+              } else {
+                console.log('[sidebar.js] Successfully highlighted cached issues. Applied highlights map:', highlightResponse.appliedHighlightsMap);
+                // Show results with proper highlight mapping
+                showResults(cachedIssues, highlightResponse.appliedHighlightsMap);
+              }
+            });
+          }, 500); // 500ms delay to ensure content script is ready
+        } else {
+          console.log('[sidebar.js] No cached results found for URL:', currentUrl);
         }
       });
     });
@@ -320,54 +400,97 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const article = response.article;
         
-        // Call the API with enhanced security
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-        
-        fetch('https://news-notes.onrender.com/analyze', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          credentials: 'omit',
-          body: JSON.stringify(article),
-          signal: controller.signal
+        // First, test basic connectivity to the API
+        console.log('[DEBUG] Testing API connectivity...');
+        fetch(config.getBaseUrl(), {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000) // 5 second timeout for connectivity test
         })
-        .finally(() => {
-          clearTimeout(timeoutId);
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          // Cache the results for this URL
-          cacheResults(tab.url, data.issues);
+        .then(connectResponse => {
+          console.log('[DEBUG] API connectivity test passed:', connectResponse.status);
           
-          // Highlight issues on the page
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'highlight',
-            issues: data.issues
-          }, highlightResponse => {
-            console.log('[sidebar.js] Highlight response received:', highlightResponse);
+          // Now proceed with the actual analysis
+          performAnalysis();
+        })
+        .catch(connectError => {
+          console.log('[DEBUG] API connectivity test failed:', connectError);
+          if (connectError.name === 'TimeoutError') {
+            showError('Cannot connect to analysis server (timeout). Please check your internet connection.');
+          } else {
+            showError('Cannot connect to analysis server. Please check your internet connection.');
+          }
+        });
+        
+        function performAnalysis() {
+          // Call the API with enhanced security
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            console.log('[DEBUG] AbortController timeout triggered after 60 seconds');
+            controller.abort();
+          }, 60000); // Increased from 30000 to 60000 (60 seconds)
+          
+          console.log('[DEBUG] Starting fetch request to:', config.getApiUrl());
+          
+          fetch(config.getApiUrl(), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'omit',
+            body: JSON.stringify(article),
+            signal: controller.signal
+          })
+          .then(response => {
+            console.log('[DEBUG] Fetch response received:', response.status, response.statusText);
+            if (!response.ok) {
+              throw new Error(`API error: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            console.log('[DEBUG] Response data received, clearing timeout');
+            // Clear the timeout first since we got a successful response
+            clearTimeout(timeoutId);
             
-            if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
-              console.warn('Failed to highlight issues on the page.', chrome.runtime.lastError);
-              // Show results anyway, but without click functionality  
-              showResults(data.issues, []);
+            console.log('[DEBUG] Data received:', { issuesCount: data.issues?.length });
+            
+            // Cache the results for this URL
+            cacheResults(tab.url, data.issues);
+            
+            // Highlight issues on the page
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'highlight',
+              issues: data.issues
+            }, highlightResponse => {
+              console.log('[sidebar.js] Highlight response received:', highlightResponse);
+              
+              if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
+                console.warn('Failed to highlight issues on the page.', chrome.runtime.lastError);
+                // Show results anyway, but without click functionality  
+                showResults(data.issues, []);
+              } else {
+                console.log('[sidebar.js] Highlight successful, appliedHighlightsMap:', highlightResponse.appliedHighlightsMap);
+                // Show results in sidebar
+                showResults(data.issues, highlightResponse.appliedHighlightsMap);
+              }
+            });
+          })
+          .catch(error => {
+            console.log('[DEBUG] Fetch error caught:', error.name, error.message);
+            // Clear the timeout on error as well
+            clearTimeout(timeoutId);
+            
+            // More specific error handling
+            if (error.name === 'AbortError') {
+              showError('Request was cancelled (this may happen if the server takes too long to respond)');
+            } else if (error.message.includes('Failed to fetch')) {
+              showError('Cannot connect to the analysis server. Please check your internet connection.');
             } else {
-              console.log('[sidebar.js] Highlight successful, appliedHighlightsMap:', highlightResponse.appliedHighlightsMap);
-              // Show results in sidebar
-              showResults(data.issues, highlightResponse.appliedHighlightsMap);
+              showError(error.message);
             }
           });
-        })
-        .catch(error => {
-          showError(error.message);
-        });
+        }
       });
     } catch (error) {
       showError(error.message);

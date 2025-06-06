@@ -1,12 +1,88 @@
 // Background service worker for TruthPilot extension
+"use strict";
+
 console.log("TruthPilot background script loaded");
 
-// Configuration
-const API_URL = "https://news-notes.onrender.com/analyze";
+// Configuration will be loaded dynamically
+let TruthPilotConfig = null;
+let API_URL = null;
+
+// Load configuration
+async function loadConfig() {
+  try {
+    // Inline configuration for service worker
+    TruthPilotConfig = {
+      // Set this to 'development' or 'production'
+      ENVIRONMENT: 'development', // Change this to 'production' for prod builds
+      
+      // Environment-specific configurations
+      environments: {
+        development: {
+          API_BASE_URL: 'http://localhost:8000',
+          API_ENDPOINT: 'http://localhost:8000/analyze'
+        },
+        production: {
+          API_BASE_URL: 'https://your-app.onrender.com', // Replace with your actual Render URL
+          API_ENDPOINT: 'https://your-app.onrender.com/analyze'
+        }
+      },
+      
+      // Get current environment config
+      get current() {
+        return this.environments[this.ENVIRONMENT];
+      },
+      
+      // Helper methods
+      getApiUrl() {
+        return this.current.API_ENDPOINT;
+      },
+      
+      getBaseUrl() {
+        return this.current.API_BASE_URL;
+      },
+      
+      isDevelopment() {
+        return this.ENVIRONMENT === 'development';
+      },
+      
+      isProduction() {
+        return this.ENVIRONMENT === 'production';
+      }
+    };
+
+    // Make config available globally for service worker context
+    self.TruthPilotConfig = TruthPilotConfig;
+    
+    API_URL = TruthPilotConfig.getApiUrl();
+    
+    console.log(`TruthPilot running in ${TruthPilotConfig.ENVIRONMENT} mode`);
+    console.log(`API URL: ${API_URL}`);
+    
+    return TruthPilotConfig;
+  } catch (error) {
+    console.error("Failed to load configuration:", error);
+    throw error;
+  }
+}
+
+// Initialize the extension
+async function initialize() {
+  await loadConfig();
+  console.log("TruthPilot configuration loaded successfully");
+}
+
+// Load config on startup
+initialize().catch(console.error);
 
 // Listen for extension icon click
 chrome.action.onClicked.addListener(async (tab) => {
   console.log("Extension icon clicked on tab:", tab.id);
+  
+  // Ensure config is loaded
+  if (!TruthPilotConfig) {
+    await loadConfig();
+  }
+  
   const supportedWebsites = ["bbc.com", "bbc.co.uk", "cnn.com", "nytimes.com", "washingtonpost.com", "wsj.com", "bloomberg.com", "ft.com", "reuters.com", "walla.co.il", "ynet.co.il", "n12.co.il", "c14.co.il", "mako.co.il"];
   
   try {
