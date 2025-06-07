@@ -39,12 +39,12 @@ pip install -r requirements.txt
 ```
 OPENAI_API_KEY=your_openai_api_key_here
 PERPLEXITY_API_KEY=your_perplexity_api_key_here
-YOU_API_KEY=your_you_api_key_here
+YDC_API_KEY=your_you_api_key_here
 MONGODB_CONNECTION_STRING=your_mongodb_connection_string_here
 ```
-   - `OPENAI_API_KEY`: Used for OpenAI services (if still applicable).
-   - `PERPLEXITY_API_KEY`: Used for Perplexity AI services (currently not the primary analysis provider).
-   - `YOU_API_KEY`: Required for the you.com API integration. The backend uses this key to interact with the You.com Research API via a custom Langchain LLM wrapper (`news-fact-checker/backend/you_langchain_wrapper.py`). This integration leverages Langchain for prompt management and structured output parsing from the API.
+   - `OPENAI_API_KEY`: Used for OpenAI services (fallback option).
+   - `PERPLEXITY_API_KEY`: Used for Perplexity AI services (fallback option).
+   - `YDC_API_KEY`: Required for the You.com API integration. The backend uses the official LangChain You.com integration (`langchain_community.llms.you.You`) to interact with the You.com Research API. This provides better stability and follows LangChain best practices.
    - `MONGODB_CONNECTION_STRING`: Required to connect to your MongoDB instance for caching analysis results.
 
    The project uses `langchain` (already listed in `requirements.txt`) to orchestrate interactions with language models.
@@ -76,11 +76,11 @@ The server will start at https://news-notes.onrender.com/.
 
 The core analysis is performed by the backend:
 1. Article content is sent from the Chrome extension to the backend.
-2. The backend utilizes the You.com Research API, accessed via a custom Langchain LLM wrapper (`YouChatLLM`).
-3. Langchain is used to:
+2. The backend uses the official LangChain You.com integration (`langchain_community.llms.you.You`) to access the You.com Research API.
+3. LangChain is used to:
     - Construct a detailed prompt for the You.com API, instructing it to analyze the article for inaccuracies, bias, or misleading statements.
-    - Request a structured JSON output from the API.
-    - Parse this JSON output into Pydantic models.
+    - Request a structured JSON output from the API with robust parsing and fallback mechanisms.
+    - Parse the response into Pydantic models with error handling for non-standard JSON formats.
 4. Identified issues (problematic text, explanation, source URLs, confidence score) are returned to the extension.
 5. The extension then highlights these issues on the web page.
 6. Caching is implemented using MongoDB to store analysis results and avoid re-processing identical articles.
@@ -98,6 +98,5 @@ MIT
 ## Acknowledgments
 
 - Uses [Mozilla's Readability.js](https://github.com/mozilla/readability) for article extraction
-- Core analysis powered by the You.com Research API.
-- Orchestration and interaction with the API is managed using the Langchain framework.
-- Uses [Mozilla's Readability.js](https://github.com/mozilla/readability) for article extraction in the extension.
+- Core analysis powered by the You.com Research API via the official LangChain integration
+- Orchestration and interaction with the API is managed using the LangChain framework

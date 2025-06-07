@@ -40,6 +40,15 @@ function extractArticleContent() {
 function clearExistingHighlights() {
   console.log('[content.js] Clearing existing highlights');
   
+  // Remove existing tooltips from body
+  const existingTooltips = document.querySelectorAll('.truthpilot-tooltip');
+  console.log('[content.js] Found', existingTooltips.length, 'existing tooltips to remove');
+  existingTooltips.forEach(tooltip => {
+    if (tooltip.parentNode) {
+      tooltip.parentNode.removeChild(tooltip);
+    }
+  });
+  
   // Remove existing highlight elements
   const existingHighlights = document.querySelectorAll('.truthpilot-highlight');
   console.log('[content.js] Found', existingHighlights.length, 'existing highlights to remove');
@@ -110,9 +119,6 @@ function performHighlighting(issues) {
       width: 300px; /* Default width */
       position: absolute;
       z-index: 2147483647; /* Maximum z-index to ensure tooltip appears above everything */
-      bottom: 125%; /* Position above the highlight */
-      left: 50%;
-      transform: translateX(-50%); /* Center tooltip */
       transition: opacity 0.3s, visibility 0.3s;
       /* Base styles will be refined by JS below */
       background-color: #ffffff; 
@@ -181,7 +187,12 @@ function performHighlighting(issues) {
         const currentNodeText = node.textContent || ""; // Ensure not null
         const normalizedNodeText = currentNodeText.trim().replace(/\s+/g, ' ');
 
-        if (normalizedIssueText && normalizedNodeText.includes(normalizedIssueText)) { // Check normalizedIssueText is not empty
+        // Check for matches: exact, normalized, or partial matches
+        if (normalizedIssueText && (
+          currentNodeText.includes(issue.text) || // exact match
+          normalizedNodeText.includes(normalizedIssueText) || // normalized match
+          normalizedNodeText.toLowerCase().includes(normalizedIssueText.toLowerCase()) // case-insensitive match
+        )) {
           if (originalIssueIndex === 0) { console.log('[content.js] First issue text found in node:', node.textContent); }
           textNodes.push(node);
         }
@@ -198,21 +209,69 @@ function performHighlighting(issues) {
         let textToHighlight = issue.text;
         
         if (parts.length === 1) {
-          // If exact match didn't work, try case-insensitive match
-          const lowerNodeText = originalNodeTextContent.toLowerCase();
-          const lowerIssueText = issue.text.toLowerCase();
-          const startIndex = lowerNodeText.indexOf(lowerIssueText);
+          // If exact match didn't work, try normalized match
+          const normalizedNodeText = originalNodeTextContent.trim().replace(/\s+/g, ' ');
+          const normalizedIssueText = issue.text.trim().replace(/\s+/g, ' ');
+          const normalizedStartIndex = normalizedNodeText.indexOf(normalizedIssueText);
           
-          if (startIndex !== -1) {
-            const endIndex = startIndex + issue.text.length;
-            const beforeText = originalNodeTextContent.substring(0, startIndex);
-            const matchText = originalNodeTextContent.substring(startIndex, endIndex);
-            const afterText = originalNodeTextContent.substring(endIndex);
-            parts = [beforeText, afterText];
-            textToHighlight = matchText; // Use the actual matched text with original casing
+          if (normalizedStartIndex !== -1) {
+            // Find the actual start position in the original text
+            let actualStartIndex = -1;
+            let normalizedPos = 0;
+            let originalPos = 0;
             
-            if (originalIssueIndex === 0) {
-              console.log('[content.js] Using case-insensitive match. Original issue text:', issue.text, 'Matched text:', matchText);
+            while (originalPos < originalNodeTextContent.length && normalizedPos <= normalizedStartIndex) {
+              if (normalizedPos === normalizedStartIndex) {
+                actualStartIndex = originalPos;
+                break;
+              }
+              const char = originalNodeTextContent[originalPos];
+              if (char.trim()) {
+                normalizedPos++;
+              }
+              originalPos++;
+            }
+            
+            if (actualStartIndex !== -1) {
+              // Find the end position by counting non-whitespace characters
+              let actualEndIndex = actualStartIndex;
+              let remainingLength = normalizedIssueText.length;
+              
+              while (actualEndIndex < originalNodeTextContent.length && remainingLength > 0) {
+                const char = originalNodeTextContent[actualEndIndex];
+                if (char.trim()) {
+                  remainingLength--;
+                }
+                actualEndIndex++;
+              }
+              
+              const beforeText = originalNodeTextContent.substring(0, actualStartIndex);
+              const matchText = originalNodeTextContent.substring(actualStartIndex, actualEndIndex);
+              const afterText = originalNodeTextContent.substring(actualEndIndex);
+              parts = [beforeText, afterText];
+              textToHighlight = matchText;
+              
+              if (originalIssueIndex === 0) {
+                console.log('[content.js] Using normalized match. Original issue text:', issue.text, 'Matched text:', matchText);
+              }
+            }
+          } else {
+            // If normalized match didn't work, try case-insensitive match
+            const lowerNodeText = originalNodeTextContent.toLowerCase();
+            const lowerIssueText = issue.text.toLowerCase();
+            const startIndex = lowerNodeText.indexOf(lowerIssueText);
+            
+            if (startIndex !== -1) {
+              const endIndex = startIndex + issue.text.length;
+              const beforeText = originalNodeTextContent.substring(0, startIndex);
+              const matchText = originalNodeTextContent.substring(startIndex, endIndex);
+              const afterText = originalNodeTextContent.substring(endIndex);
+              parts = [beforeText, afterText];
+              textToHighlight = matchText; // Use the actual matched text with original casing
+              
+              if (originalIssueIndex === 0) {
+                console.log('[content.js] Using case-insensitive match. Original issue text:', issue.text, 'Matched text:', matchText);
+              }
             }
           }
         }
@@ -248,11 +307,7 @@ function performHighlighting(issues) {
             tooltip.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.15)';
             tooltip.style.borderRadius = '8px';
             tooltip.style.padding = '15px';
-            tooltip.style.lineHeight = '1.5';
-            // Ensure margin-left is adjusted if transform: translateX(-50%) is used in CSS
-            // If CSS has transform: translateX(-50%), then margin-left should be 0 or adjusted.
-            // The CSS has `left: 50%; transform: translateX(-50%);` so margin-left is not needed.
-            tooltip.style.marginLeft = '0'; 
+            tooltip.style.lineHeight = '1.5'; 
 
 
             // Create tooltip content
@@ -327,19 +382,46 @@ function performHighlighting(issues) {
               tooltip.appendChild(sourcesDiv);
             }
             
-            highlightSpan.appendChild(tooltip);
+            // Instead of appending tooltip to the highlight span, append it to document body
+            // to prevent it from being part of the article content
+            document.body.appendChild(tooltip);
+            
+            // Position tooltip relative to the highlight span
+            function positionTooltip() {
+              const rect = highlightSpan.getBoundingClientRect();
+              const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+              const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+              
+              tooltip.style.position = 'absolute';
+              tooltip.style.left = `${rect.left + scrollLeft + rect.width / 2}px`;
+              tooltip.style.top = `${rect.top + scrollTop - 10}px`; // Position above the highlight
+              tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
+            }
+            
+            // Add scroll event listener to reposition tooltip
+            let scrollHandler = null;
             
             // Tooltip interaction logic
             highlightSpan.addEventListener('mouseenter', () => {
               clearTimeout(hideTooltipTimer);
+              positionTooltip();
               tooltip.style.visibility = 'visible';
               tooltip.style.opacity = '1';
+              
+              // Add scroll listener to reposition tooltip while visible
+              scrollHandler = () => positionTooltip();
+              window.addEventListener('scroll', scrollHandler, { passive: true });
             });
 
             highlightSpan.addEventListener('mouseleave', () => {
               hideTooltipTimer = setTimeout(() => {
                 tooltip.style.visibility = 'hidden';
                 tooltip.style.opacity = '0';
+                // Remove scroll listener when tooltip is hidden
+                if (scrollHandler) {
+                  window.removeEventListener('scroll', scrollHandler);
+                  scrollHandler = null;
+                }
               }, 300);
             });
 
@@ -351,6 +433,11 @@ function performHighlighting(issues) {
               // Hide immediately when mouse leaves the tooltip itself
               tooltip.style.visibility = 'hidden';
               tooltip.style.opacity = '0';
+              // Remove scroll listener when tooltip is hidden
+              if (scrollHandler) {
+                window.removeEventListener('scroll', scrollHandler);
+                scrollHandler = null;
+              }
             });
             
             fragment.appendChild(highlightSpan);
