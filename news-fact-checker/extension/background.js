@@ -22,8 +22,8 @@ async function loadConfig() {
           API_ENDPOINT: 'http://localhost:8000/analyze'
         },
         production: {
-          API_BASE_URL: 'https://your-app.onrender.com', // Replace with your actual Render URL
-          API_ENDPOINT: 'https://your-app.onrender.com/analyze'
+          API_BASE_URL: 'https://news-notes.onrender.com', // Replace with your actual Render URL
+          API_ENDPOINT: 'https://news-notes.onrender.com/analyze'
         }
       },
       

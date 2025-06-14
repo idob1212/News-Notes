@@ -158,306 +158,417 @@ function performHighlighting(issues) {
   
   let appliedHighlightsMap = [];
   let highlightCount = 0;
+  
+  // Get the entire body text for better cross-element matching
+  const bodyText = document.body.innerText || document.body.textContent || '';
+  
   // Process each issue
   issues.forEach((issue, originalIssueIndex) => {
-    if (originalIssueIndex === 0) { console.log('[content.js] Processing first issue (index 0):', issue.text); }
+    if (originalIssueIndex === 0) { 
+      console.log('[content.js] Processing first issue (index 0):', issue.text); 
+    }
+    
     try {
-      // Find all text nodes in the document
-      const textNodes = [];
-      const walker = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-        null,
-        false
-      );
+      // Normalize issue text for better matching
+      const normalizedIssueText = normalizeText(issue.text);
+      const normalizedBodyText = normalizeText(bodyText);
       
-      let node;
-      while ((node = walker.nextNode())) {
-        // Skip script and style elements
-        if (
-          node.parentElement.tagName === 'SCRIPT' ||
-          node.parentElement.tagName === 'STYLE' ||
-          node.parentElement.classList.contains('truthpilot-highlight')
-        ) {
-          continue;
-        }
-        
-        // Normalize for more robust matching
-        const normalizedIssueText = issue.text.trim().replace(/\s+/g, ' ');
-        const currentNodeText = node.textContent || ""; // Ensure not null
-        const normalizedNodeText = currentNodeText.trim().replace(/\s+/g, ' ');
-
-        // Check for matches: exact, normalized, or partial matches
-        if (normalizedIssueText && (
-          currentNodeText.includes(issue.text) || // exact match
-          normalizedNodeText.includes(normalizedIssueText) || // normalized match
-          normalizedNodeText.toLowerCase().includes(normalizedIssueText.toLowerCase()) // case-insensitive match
-        )) {
-          if (originalIssueIndex === 0) { console.log('[content.js] First issue text found in node:', node.textContent); }
-          textNodes.push(node);
+      // Try different matching strategies
+      let matchingStrategy = null;
+      let matchIndex = -1;
+      
+      // Strategy 1: Exact match in body text
+      if (bodyText.includes(issue.text)) {
+        matchingStrategy = 'exact';
+        matchIndex = bodyText.indexOf(issue.text);
+      }
+      // Strategy 2: Normalized match
+      else if (normalizedBodyText.includes(normalizedIssueText)) {
+        matchingStrategy = 'normalized';
+        matchIndex = normalizedBodyText.indexOf(normalizedIssueText);
+      }
+      // Strategy 3: Case-insensitive match
+      else if (bodyText.toLowerCase().includes(issue.text.toLowerCase())) {
+        matchingStrategy = 'case_insensitive';
+        matchIndex = bodyText.toLowerCase().indexOf(issue.text.toLowerCase());
+      }
+      // Strategy 4: Fuzzy match (look for key words)
+      else {
+        const keyWords = extractKeyWords(issue.text);
+        if (keyWords.length > 0) {
+          for (const word of keyWords) {
+            const wordIndex = bodyText.toLowerCase().indexOf(word.toLowerCase());
+            if (wordIndex !== -1) {
+              matchingStrategy = 'fuzzy';
+              matchIndex = wordIndex;
+              break;
+            }
+          }
         }
       }
       
-      // Highlight each occurrence
-      textNodes.forEach((textNode) => {
-        const parent = textNode.parentNode;
-        // Use original node.textContent for splitting with original issue.text
-        const originalNodeTextContent = textNode.textContent || ""; 
-        
-        // Try exact match first
-        let parts = originalNodeTextContent.split(issue.text);
-        let textToHighlight = issue.text;
-        
-        if (parts.length === 1) {
-          // If exact match didn't work, try normalized match
-          const normalizedNodeText = originalNodeTextContent.trim().replace(/\s+/g, ' ');
-          const normalizedIssueText = issue.text.trim().replace(/\s+/g, ' ');
-          const normalizedStartIndex = normalizedNodeText.indexOf(normalizedIssueText);
-          
-          if (normalizedStartIndex !== -1) {
-            // Find the actual start position in the original text
-            let actualStartIndex = -1;
-            let normalizedPos = 0;
-            let originalPos = 0;
-            
-            while (originalPos < originalNodeTextContent.length && normalizedPos <= normalizedStartIndex) {
-              if (normalizedPos === normalizedStartIndex) {
-                actualStartIndex = originalPos;
-                break;
-              }
-              const char = originalNodeTextContent[originalPos];
-              if (char.trim()) {
-                normalizedPos++;
-              }
-              originalPos++;
-            }
-            
-            if (actualStartIndex !== -1) {
-              // Find the end position by counting non-whitespace characters
-              let actualEndIndex = actualStartIndex;
-              let remainingLength = normalizedIssueText.length;
-              
-              while (actualEndIndex < originalNodeTextContent.length && remainingLength > 0) {
-                const char = originalNodeTextContent[actualEndIndex];
-                if (char.trim()) {
-                  remainingLength--;
-                }
-                actualEndIndex++;
-              }
-              
-              const beforeText = originalNodeTextContent.substring(0, actualStartIndex);
-              const matchText = originalNodeTextContent.substring(actualStartIndex, actualEndIndex);
-              const afterText = originalNodeTextContent.substring(actualEndIndex);
-              parts = [beforeText, afterText];
-              textToHighlight = matchText;
-              
-              if (originalIssueIndex === 0) {
-                console.log('[content.js] Using normalized match. Original issue text:', issue.text, 'Matched text:', matchText);
-              }
-            }
-          } else {
-            // If normalized match didn't work, try case-insensitive match
-            const lowerNodeText = originalNodeTextContent.toLowerCase();
-            const lowerIssueText = issue.text.toLowerCase();
-            const startIndex = lowerNodeText.indexOf(lowerIssueText);
-            
-            if (startIndex !== -1) {
-              const endIndex = startIndex + issue.text.length;
-              const beforeText = originalNodeTextContent.substring(0, startIndex);
-              const matchText = originalNodeTextContent.substring(startIndex, endIndex);
-              const afterText = originalNodeTextContent.substring(endIndex);
-              parts = [beforeText, afterText];
-              textToHighlight = matchText; // Use the actual matched text with original casing
-              
-              if (originalIssueIndex === 0) {
-                console.log('[content.js] Using case-insensitive match. Original issue text:', issue.text, 'Matched text:', matchText);
-              }
-            }
-          }
-        }
-        
-        if (parts.length > 1) {
-          console.log(`[content.js] Creating highlight for issue ${originalIssueIndex}, parts count:`, parts.length);
-          // Create a document fragment to hold the new nodes
-          const fragment = document.createDocumentFragment();
-          
-          // Add the first part (if any)
-          if (parts[0]) {
-            fragment.appendChild(document.createTextNode(parts[0]));
-          }
-          
-          // Create the highlighted element
-          for (let i = 1; i < parts.length; i++) {
-            const newDomId = `truthpilot-highlight-${highlightCount}`;
-            const highlightSpan = document.createElement('span');
-            highlightSpan.className = 'truthpilot-highlight';
-            highlightSpan.id = newDomId; // Set the new unique DOM ID
-            highlightSpan.textContent = textToHighlight;
-            
-            if (originalIssueIndex === 0) { console.log('[content.js] Creating map for first issue. ID:', newDomId, 'Mapping:', { originalIssueIndex: originalIssueIndex, highlightId: newDomId }); }
-            appliedHighlightsMap.push({ originalIssueIndex: originalIssueIndex, highlightId: newDomId });
-            highlightCount++;
-            
-            // Add the tooltip
-            const tooltip = document.createElement('div');
-            tooltip.className = 'truthpilot-tooltip';
-            // Apply main tooltip styles via JS - these will override CSS if there are conflicts
-            tooltip.style.backgroundColor = '#ffffff';
-            tooltip.style.color = '#202124';
-            tooltip.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.15)';
-            tooltip.style.borderRadius = '8px';
-            tooltip.style.padding = '15px';
-            tooltip.style.lineHeight = '1.5'; 
-
-
-            // Create tooltip content
-            const explanation = document.createElement('p');
-            explanation.textContent = issue.explanation;
-            explanation.style.marginBottom = '10px';
-            // Default P styling with new tooltip color should be fine
-            tooltip.appendChild(explanation);
-            
-            const confidence = document.createElement('p');
-            confidence.textContent = `Confidence: ${Math.round(issue.confidence_score * 100)}%`;
-            confidence.style.color = '#1a73e8'; // Primary blue
-            confidence.style.fontWeight = 'bold';
-            confidence.style.fontSize = '13px';
-            confidence.style.marginTop = '0';
-            confidence.style.marginBottom = '12px';
-            tooltip.appendChild(confidence);
-            
-            // Add sources if available
-            if (issue.source_urls && issue.source_urls.length > 0) {
-              const sourcesDiv = document.createElement('div');
-              sourcesDiv.className = 'truthpilot-sources'; // Keep class for potential base styling
-              sourcesDiv.style.marginTop = '12px';
-              sourcesDiv.style.paddingTop = '12px';
-              sourcesDiv.style.borderTop = '1px solid #e0e0e0'; // Lighter separator
-              
-              const sourcesLabel = document.createElement('p');
-              sourcesLabel.textContent = 'Sources:';
-              sourcesLabel.style.fontWeight = 'bold';
-              sourcesLabel.style.color = '#333333';
-              sourcesLabel.style.marginBottom = '6px';
-              sourcesLabel.style.marginTop = '0'; // Reset top margin for the label
-              sourcesDiv.appendChild(sourcesLabel);
-              
-              issue.source_urls.forEach(url => {
-                const link = document.createElement('a');
-                link.href = url;
-                link.textContent = url;
-                link.target = '_blank';
-                link.rel = 'noopener noreferrer';
-                
-                link.style.color = '#1a73e8'; // Primary blue
-                link.style.textDecoration = 'none'; // Cleaner look
-                link.style.display = 'block'; // Ensure block for text-overflow
-                link.style.marginBottom = '4px'; // Keep from existing link style
-                link.style.whiteSpace = 'nowrap'; // Keep
-                link.style.overflow = 'hidden'; // Keep
-                link.style.textOverflow = 'ellipsis'; // Keep
-                link.style.maxWidth = '100%'; // Keep
-                link.style.cursor = 'pointer'; // Ensure cursor shows it's clickable
-                link.style.pointerEvents = 'auto'; // Ensure link can receive clicks
-
-                link.addEventListener('mouseenter', () => link.style.textDecoration = 'underline');
-                link.addEventListener('mouseleave', () => link.style.textDecoration = 'none');
-                
-                // Make the link clickable by stopping event propagation from highlight span
-                link.addEventListener('click', (e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  // Open link manually to ensure it works
-                  window.open(url, '_blank', 'noopener,noreferrer');
-                });
-                
-                // Also handle mousedown to catch any missed clicks
-                link.addEventListener('mousedown', (e) => {
-                  e.stopPropagation();
-                });
-                
-                sourcesDiv.appendChild(link);
-              });
-              
-              tooltip.appendChild(sourcesDiv);
-            }
-            
-            // Instead of appending tooltip to the highlight span, append it to document body
-            // to prevent it from being part of the article content
-            document.body.appendChild(tooltip);
-            
-            // Position tooltip relative to the highlight span
-            function positionTooltip() {
-              const rect = highlightSpan.getBoundingClientRect();
-              const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-              const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-              
-              tooltip.style.position = 'absolute';
-              tooltip.style.left = `${rect.left + scrollLeft + rect.width / 2}px`;
-              tooltip.style.top = `${rect.top + scrollTop - 10}px`; // Position above the highlight
-              tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
-            }
-            
-            // Add scroll event listener to reposition tooltip
-            let scrollHandler = null;
-            
-            // Tooltip interaction logic
-            highlightSpan.addEventListener('mouseenter', () => {
-              clearTimeout(hideTooltipTimer);
-              positionTooltip();
-              tooltip.style.visibility = 'visible';
-              tooltip.style.opacity = '1';
-              
-              // Add scroll listener to reposition tooltip while visible
-              scrollHandler = () => positionTooltip();
-              window.addEventListener('scroll', scrollHandler, { passive: true });
-            });
-
-            highlightSpan.addEventListener('mouseleave', () => {
-              hideTooltipTimer = setTimeout(() => {
-                tooltip.style.visibility = 'hidden';
-                tooltip.style.opacity = '0';
-                // Remove scroll listener when tooltip is hidden
-                if (scrollHandler) {
-                  window.removeEventListener('scroll', scrollHandler);
-                  scrollHandler = null;
-                }
-              }, 300);
-            });
-
-            tooltip.addEventListener('mouseenter', () => {
-              clearTimeout(hideTooltipTimer);
-            });
-
-            tooltip.addEventListener('mouseleave', () => {
-              // Hide immediately when mouse leaves the tooltip itself
-              tooltip.style.visibility = 'hidden';
-              tooltip.style.opacity = '0';
-              // Remove scroll listener when tooltip is hidden
-              if (scrollHandler) {
-                window.removeEventListener('scroll', scrollHandler);
-                scrollHandler = null;
-              }
-            });
-            
-            fragment.appendChild(highlightSpan);
-            
-            // Add the remaining part (if any and not the last part)
-            if (parts[i]) {
-              fragment.appendChild(document.createTextNode(parts[i]));
-            }
-          }
-          
-          // Replace the original text node with the fragment
-          parent.replaceChild(fragment, textNode);
-          // No need to push to appliedHighlightIds anymore, map handles it.
-        }
-      });
+      if (matchIndex === -1) {
+        console.log(`[content.js] No match found for issue ${originalIssueIndex}: "${issue.text.substring(0, 50)}..."`);
+        // Still create a mapping but mark it as not found
+        appliedHighlightsMap.push({ originalIssueIndex: originalIssueIndex, highlightId: null, matchFound: false });
+        return; // Skip to next issue
+      }
+      
+      console.log(`[content.js] Match found for issue ${originalIssueIndex} using ${matchingStrategy} strategy`);
+      
+      // Now find and highlight the actual text nodes
+      const highlighted = highlightTextInNodes(issue, originalIssueIndex, matchingStrategy, highlightCount);
+      if (highlighted.success) {
+        appliedHighlightsMap = appliedHighlightsMap.concat(highlighted.mappings);
+        highlightCount += highlighted.count;
+      } else {
+        // Fallback: create a virtual highlight for clicking purposes
+        const virtualHighlightId = `truthpilot-virtual-${highlightCount}`;
+        appliedHighlightsMap.push({ 
+          originalIssueIndex: originalIssueIndex, 
+          highlightId: virtualHighlightId, 
+          matchFound: true,
+          isVirtual: true 
+        });
+        highlightCount++;
+        console.log(`[content.js] Created virtual highlight for issue ${originalIssueIndex}: ${virtualHighlightId}`);
+      }
+      
     } catch (error) {
       console.error("Error highlighting issue:", error, issue);
+      // Add to map as not found to prevent undefined behavior
+      appliedHighlightsMap.push({ originalIssueIndex: originalIssueIndex, highlightId: null, matchFound: false });
     }
   });
+  
+  console.log(`[content.js] Highlighting complete. Total mappings: ${appliedHighlightsMap.length}`);
   return appliedHighlightsMap;
+}
+
+// Helper function to normalize text for better matching
+function normalizeText(text) {
+  return text.trim().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '');
+}
+
+// Helper function to extract key words from issue text
+function extractKeyWords(text) {
+  // Remove common words and extract meaningful terms
+  const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those']);
+  
+  return text.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 3 && !commonWords.has(word))
+    .slice(0, 3); // Take up to 3 key words
+}
+
+// Helper function to highlight text in actual DOM nodes
+function highlightTextInNodes(issue, originalIssueIndex, matchingStrategy, startingHighlightCount) {
+  let highlightCount = 0;
+  let mappings = [];
+  let foundAny = false;
+  
+  // Find all text nodes in the document
+  const textNodes = [];
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    null,
+    false
+  );
+  
+  let node;
+  while ((node = walker.nextNode())) {
+    // Skip script and style elements and existing highlights
+    if (
+      node.parentElement.tagName === 'SCRIPT' ||
+      node.parentElement.tagName === 'STYLE' ||
+      node.parentElement.classList.contains('truthpilot-highlight')
+    ) {
+      continue;
+    }
+    textNodes.push(node);
+  }
+  
+  // Try to find and highlight the text
+  for (const textNode of textNodes) {
+    const nodeText = textNode.textContent || "";
+    let shouldHighlight = false;
+    let textToHighlight = issue.text;
+    let parts = [];
+    
+    // Apply matching strategy
+    switch (matchingStrategy) {
+      case 'exact':
+        if (nodeText.includes(issue.text)) {
+          parts = nodeText.split(issue.text);
+          shouldHighlight = parts.length > 1;
+        }
+        break;
+        
+      case 'normalized':
+        const normalizedNodeText = normalizeText(nodeText);
+        const normalizedIssueText = normalizeText(issue.text);
+        if (normalizedNodeText.includes(normalizedIssueText)) {
+          // Find the actual position in original text
+          const match = findOriginalTextMatch(nodeText, issue.text);
+          if (match) {
+            parts = [nodeText.substring(0, match.start), nodeText.substring(match.end)];
+            textToHighlight = nodeText.substring(match.start, match.end);
+            shouldHighlight = true;
+          }
+        }
+        break;
+        
+      case 'case_insensitive':
+        const lowerNodeText = nodeText.toLowerCase();
+        const lowerIssueText = issue.text.toLowerCase();
+        const startIndex = lowerNodeText.indexOf(lowerIssueText);
+        if (startIndex !== -1) {
+          const endIndex = startIndex + issue.text.length;
+          parts = [nodeText.substring(0, startIndex), nodeText.substring(endIndex)];
+          textToHighlight = nodeText.substring(startIndex, endIndex);
+          shouldHighlight = true;
+        }
+        break;
+        
+      case 'fuzzy':
+        // For fuzzy matching, highlight if any key words are found
+        const keyWords = extractKeyWords(issue.text);
+        for (const word of keyWords) {
+          if (nodeText.toLowerCase().includes(word.toLowerCase())) {
+            const wordIndex = nodeText.toLowerCase().indexOf(word.toLowerCase());
+            const wordEnd = wordIndex + word.length;
+            parts = [nodeText.substring(0, wordIndex), nodeText.substring(wordEnd)];
+            textToHighlight = nodeText.substring(wordIndex, wordEnd);
+            shouldHighlight = true;
+            break;
+          }
+        }
+        break;
+    }
+    
+    if (shouldHighlight && parts.length > 1) {
+      foundAny = true;
+      const parent = textNode.parentNode;
+      const fragment = document.createDocumentFragment();
+      
+      // Add the first part (if any)
+      if (parts[0]) {
+        fragment.appendChild(document.createTextNode(parts[0]));
+      }
+      
+      // Create the highlighted element
+      for (let i = 1; i < parts.length; i++) {
+        const newDomId = `truthpilot-highlight-${startingHighlightCount + highlightCount}`;
+        const highlightSpan = document.createElement('span');
+        highlightSpan.className = 'truthpilot-highlight';
+        highlightSpan.id = newDomId;
+        highlightSpan.textContent = textToHighlight;
+        
+        mappings.push({ originalIssueIndex: originalIssueIndex, highlightId: newDomId, matchFound: true });
+        highlightCount++;
+        
+        // Add tooltip (existing tooltip creation code)
+        createTooltipForHighlight(highlightSpan, issue);
+        
+        fragment.appendChild(highlightSpan);
+        
+        // Add the remaining part (if any)
+        if (parts[i]) {
+          fragment.appendChild(document.createTextNode(parts[i]));
+        }
+      }
+      
+      // Replace the original text node with the fragment
+      parent.replaceChild(fragment, textNode);
+      
+      // For efficiency, break after first successful highlight per issue
+      // Remove this break if you want to highlight all occurrences
+      break;
+    }
+  }
+  
+  return { success: foundAny, mappings: mappings, count: highlightCount };
+}
+
+// Helper function to find original text match position
+function findOriginalTextMatch(originalText, searchText) {
+  const normalizedOriginal = normalizeText(originalText).toLowerCase();
+  const normalizedSearch = normalizeText(searchText).toLowerCase();
+  const normalizedIndex = normalizedOriginal.indexOf(normalizedSearch);
+  
+  if (normalizedIndex === -1) return null;
+  
+  // Map back to original text position
+  let originalIndex = 0;
+  let normalizedPos = 0;
+  
+  while (originalIndex < originalText.length && normalizedPos < normalizedIndex) {
+    const char = originalText[originalIndex];
+    if (char.match(/\w/)) {
+      normalizedPos++;
+    }
+    originalIndex++;
+  }
+  
+  // Find end position
+  let endIndex = originalIndex;
+  let remainingLength = normalizedSearch.replace(/\s+/g, '').length;
+  
+  while (endIndex < originalText.length && remainingLength > 0) {
+    const char = originalText[endIndex];
+    if (char.match(/\w/)) {
+      remainingLength--;
+    }
+    endIndex++;
+  }
+  
+  return { start: originalIndex, end: endIndex };
+}
+
+// Helper function to create tooltip for highlight
+function createTooltipForHighlight(highlightSpan, issue) {
+  // Create the tooltip
+  const tooltip = document.createElement('div');
+  tooltip.className = 'truthpilot-tooltip';
+  // Apply main tooltip styles via JS - these will override CSS if there are conflicts
+  tooltip.style.backgroundColor = '#ffffff';
+  tooltip.style.color = '#202124';
+  tooltip.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.15)';
+  tooltip.style.borderRadius = '8px';
+  tooltip.style.padding = '15px';
+  tooltip.style.lineHeight = '1.5'; 
+
+  // Create tooltip content
+  const explanation = document.createElement('p');
+  explanation.textContent = issue.explanation;
+  explanation.style.marginBottom = '10px';
+  // Default P styling with new tooltip color should be fine
+  tooltip.appendChild(explanation);
+  
+  const confidence = document.createElement('p');
+  confidence.textContent = `Confidence: ${Math.round(issue.confidence_score * 100)}%`;
+  confidence.style.color = '#1a73e8'; // Primary blue
+  confidence.style.fontWeight = 'bold';
+  confidence.style.fontSize = '13px';
+  confidence.style.marginTop = '0';
+  confidence.style.marginBottom = '12px';
+  tooltip.appendChild(confidence);
+  
+  // Add sources if available
+  if (issue.source_urls && issue.source_urls.length > 0) {
+    const sourcesDiv = document.createElement('div');
+    sourcesDiv.className = 'truthpilot-sources'; // Keep class for potential base styling
+    sourcesDiv.style.marginTop = '12px';
+    sourcesDiv.style.paddingTop = '12px';
+    sourcesDiv.style.borderTop = '1px solid #e0e0e0'; // Lighter separator
+    
+    const sourcesLabel = document.createElement('p');
+    sourcesLabel.textContent = 'Sources:';
+    sourcesLabel.style.fontWeight = 'bold';
+    sourcesLabel.style.color = '#333333';
+    sourcesLabel.style.marginBottom = '6px';
+    sourcesLabel.style.marginTop = '0'; // Reset top margin for the label
+    sourcesDiv.appendChild(sourcesLabel);
+    
+    issue.source_urls.forEach(url => {
+      const link = document.createElement('a');
+      link.href = url;
+      link.textContent = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      
+      link.style.color = '#1a73e8'; // Primary blue
+      link.style.textDecoration = 'none'; // Cleaner look
+      link.style.display = 'block'; // Ensure block for text-overflow
+      link.style.marginBottom = '4px'; // Keep from existing link style
+      link.style.whiteSpace = 'nowrap'; // Keep
+      link.style.overflow = 'hidden'; // Keep
+      link.style.textOverflow = 'ellipsis'; // Keep
+      link.style.maxWidth = '100%'; // Keep
+      link.style.cursor = 'pointer'; // Ensure cursor shows it's clickable
+      link.style.pointerEvents = 'auto'; // Ensure link can receive clicks
+
+      link.addEventListener('mouseenter', () => link.style.textDecoration = 'underline');
+      link.addEventListener('mouseleave', () => link.style.textDecoration = 'none');
+      
+      // Make the link clickable by stopping event propagation from highlight span
+      link.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        // Open link manually to ensure it works
+        window.open(url, '_blank', 'noopener,noreferrer');
+      });
+      
+      // Also handle mousedown to catch any missed clicks
+      link.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+      });
+      
+      sourcesDiv.appendChild(link);
+    });
+    
+    tooltip.appendChild(sourcesDiv);
+  }
+  
+  // Position tooltip relative to the highlight span
+  function positionTooltip() {
+    const rect = highlightSpan.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    
+    tooltip.style.position = 'absolute';
+    tooltip.style.left = `${rect.left + scrollLeft + rect.width / 2}px`;
+    tooltip.style.top = `${rect.top + scrollTop - 10}px`; // Position above the highlight
+    tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
+  }
+  
+  // Add scroll event listener to reposition tooltip
+  let scrollHandler = null;
+  
+  // Tooltip interaction logic
+  highlightSpan.addEventListener('mouseenter', () => {
+    clearTimeout(hideTooltipTimer);
+    positionTooltip();
+    tooltip.style.visibility = 'visible';
+    tooltip.style.opacity = '1';
+    
+    // Add scroll listener to reposition tooltip while visible
+    scrollHandler = () => positionTooltip();
+    window.addEventListener('scroll', scrollHandler, { passive: true });
+  });
+
+  highlightSpan.addEventListener('mouseleave', () => {
+    hideTooltipTimer = setTimeout(() => {
+      tooltip.style.visibility = 'hidden';
+      tooltip.style.opacity = '0';
+      // Remove scroll listener when tooltip is hidden
+      if (scrollHandler) {
+        window.removeEventListener('scroll', scrollHandler);
+        scrollHandler = null;
+      }
+    }, 300);
+  });
+
+  tooltip.addEventListener('mouseenter', () => {
+    clearTimeout(hideTooltipTimer);
+  });
+
+     tooltip.addEventListener('mouseleave', () => {
+     // Hide immediately when mouse leaves the tooltip itself
+     tooltip.style.visibility = 'hidden';
+     tooltip.style.opacity = '0';
+     // Remove scroll listener when tooltip is hidden
+     if (scrollHandler) {
+       window.removeEventListener('scroll', scrollHandler);
+       scrollHandler = null;
+     }
+   });
+   
+   // Instead of appending tooltip to the highlight span, append it to document body
+   // to prevent it from being part of the article content
+   document.body.appendChild(tooltip);
 }
 
 // Function to create and inject the sidebar iframe
@@ -600,6 +711,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     if (!highlightId) {
       sendResponse({ success: false, error: "No highlightId provided" });
+      return true;
+    }
+    
+    // Check if this is a virtual highlight (starts with truthpilot-virtual-)
+    if (highlightId.startsWith('truthpilot-virtual-')) {
+      console.log("Virtual highlight clicked - scrolling to top of page");
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Provide visual feedback for virtual highlight
+      document.body.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
+      setTimeout(() => {
+        document.body.style.backgroundColor = '';
+      }, 1000);
+      sendResponse({ success: true, message: "Scrolled to top (text not found on page)" });
       return true;
     }
     
