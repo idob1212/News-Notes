@@ -1,218 +1,188 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
-from datetime import datetime # Added import
-import os
 import time
+import traceback
 from dotenv import load_dotenv
-from langchain_perplexity import ChatPerplexity
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.documents import Document
-import re
-import asyncio
-from pymongo import MongoClient
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Check if API key is available
-perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
-if not perplexity_api_key:
-    raise ValueError("PERPLEXITY_API_KEY not found in environment variables. Please add it to your .env file.")
-
-app = FastAPI()
-
-# Add CORS middleware to allow requests from Chrome extension
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify extension ID instead of *
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+from config import settings
+from logger import app_logger, analysis_logger
+from models import Issue, ArticleRequest, AnalysisResponse
+from utils import (
+    setup_database_connection,
+    setup_perplexity_llm,
+    create_analysis_prompt,
+    get_cached_analysis,
+    save_analysis_to_cache,
+    perform_fact_check_analysis
 )
 
-# Define issue model for the response
-class Issue(BaseModel):
-    text: str = Field(description="The exact text that contains the issue")
-    explanation: str = Field(description="A clear explanation of why it's misleading or false")
-    confidence_score: float = Field(description="Confidence score (0.0-1.0) for the assessment")
-    source_urls: Optional[List[str]] = Field(default=None, description="URLs of sources that contradict the claim")
+# Load environment variables
+load_dotenv()
 
-# Define structured output for the analysis
-class AnalysisOutput(BaseModel):
-    issues: List[Issue] = Field(description="List of problematic sections with text, explanation, and confidence score")
+# Initialize FastAPI app
+app = FastAPI(
+    title=settings.APP_TITLE,
+    description=settings.APP_DESCRIPTION,
+    version=settings.VERSION
+)
 
-# Define request model
-class ArticleRequest(BaseModel):
-    title: str
-    content: str
-    url: str
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=settings.ALLOW_CREDENTIALS,
+    allow_methods=settings.ALLOWED_METHODS,
+    allow_headers=settings.ALLOWED_HEADERS,
+)
 
-# Define response model
-class AnalysisResponse(BaseModel):
-    issues: List[Issue]
+# Models are now imported from models.py
 
-# Define Article Analysis Document model for storage
-class ArticleAnalysisDocument(BaseModel):
-    url: str  # Unique ID for the document
-    title: str
-    content: str
-    issues: List[Issue]
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+# Global variables for database and LLM
+article_analyses_collection = None
+perplexity_llm = None
+analysis_prompt = None
 
-# MongoDB setup
-mongodb_connection_string = os.getenv("MONGODB_CONNECTION_STRING")
-if not mongodb_connection_string:
-    raise ValueError("MONGODB_CONNECTION_STRING not found in environment variables.")
+def initialize_services():
+    """Initialize database connection and LLM services."""
+    global article_analyses_collection, perplexity_llm, analysis_prompt
+    
+    # Initialize database connection
+    article_analyses_collection = setup_database_connection()
+    
+    # Initialize Perplexity LLM
+    perplexity_llm = setup_perplexity_llm()
+    
+    # Create analysis prompt template
+    analysis_prompt = create_analysis_prompt()
+    
+    app_logger.info("All services initialized successfully")
 
-try:
-    mongo_client = MongoClient(mongodb_connection_string)
-    mongo_db = mongo_client.news_fact_checker_db # Or your preferred DB name
-    article_analyses_collection = mongo_db.article_analyses # Or your preferred collection name
-    # You can add a test connection here if needed, e.g., by calling mongo_client.admin.command('ping')
-    print("Successfully connected to MongoDB.")
-except Exception as e:
-    raise RuntimeError(f"Could not connect to MongoDB: {e}")
+def handle_cached_analysis(url: str) -> AnalysisResponse:
+    """
+    Check for and return cached analysis if available.
+    
+    Args:
+        url: Article URL to check for cached analysis
+        
+    Returns:
+        AnalysisResponse: Cached analysis response
+        
+    Raises:
+        None: Returns None if no cached analysis found
+    """
+    cached_issues = get_cached_analysis(article_analyses_collection, url)
+    if cached_issues:
+        analysis_logger.info(f"Found cached analysis for URL: {url}")
+        return AnalysisResponse(issues=cached_issues)
+    return None
 
+def process_new_analysis(article: ArticleRequest) -> AnalysisResponse:
+    """
+    Process a new article analysis using Perplexity LLM.
+    
+    Args:
+        article: Article data to analyze
+        
+    Returns:
+        AnalysisResponse: Analysis results
+        
+    Raises:
+        Exception: If analysis fails
+    """
+    analysis_logger.info(f"No cache found for URL: {article.url}. Starting new analysis with Perplexity Sonar Pro")
+    
+    # Perform fact-checking analysis
+    analysis_result = perform_fact_check_analysis(
+        llm=perplexity_llm,
+        prompt=analysis_prompt,
+        title=article.title,
+        url=article.url,
+        content=article.content
+    )
+    
+    analysis_logger.info(f"Analysis completed for {article.url}, found {len(analysis_result.issues)} issues")
+    
+    # Save to cache
+    save_success = save_analysis_to_cache(
+        collection=article_analyses_collection,
+        url=article.url,
+        title=article.title,
+        content=article.content,
+        issues=analysis_result.issues
+    )
+    
+    if not save_success:
+        analysis_logger.warning(f"Failed to cache analysis for URL: {article.url}")
+    
+    return AnalysisResponse(issues=analysis_result.issues)
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on application startup."""
+    try:
+        initialize_services()
+    except Exception as e:
+        app_logger.critical("Failed to initialize services", error=e)
+        raise
 
 @app.get("/")
 async def root():
-    return {"message": "News Fact-Checker API"}
+    """Health check endpoint."""
+    return {"message": "News Fact-Checker API", "status": "running"}
+
+@app.get("/health")
+async def health_check():
+    """Detailed health check endpoint."""
+    return {
+        "status": "healthy",
+        "database": "connected" if article_analyses_collection else "disconnected",
+        "llm": "configured" if perplexity_llm else "not configured"
+    }
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_article(article: ArticleRequest):
+    """
+    Analyze a news article for fact-checking issues.
+    
+    Args:
+        article: Article data including title, content, and URL
+        
+    Returns:
+        AnalysisResponse: Analysis results with identified issues
+        
+    Raises:
+        HTTPException: If analysis fails
+    """
     start_time = time.time()
     
     try:
-        print(f"[DEBUG] Starting analysis for URL: {article.url}")
+        analysis_logger.info(f"Starting analysis for URL: {article.url}")
         
-        # Check if the article analysis is already cached in MongoDB
-        cached_analysis_doc = article_analyses_collection.find_one({"url": article.url})
-
-        if cached_analysis_doc:
-            # Convert issue dicts back to Issue Pydantic models
-            issues_from_db = [Issue(**issue_data) for issue_data in cached_analysis_doc.get("issues", [])]
-            print(f"Returning cached analysis for URL: {article.url} (took {time.time() - start_time:.2f} seconds)")
-            return AnalysisResponse(issues=issues_from_db)
-
-        # If not cached, proceed with new analysis
-        print(f"No cache found for URL: {article.url}. Performing new analysis.")
-        llm = ChatPerplexity(
-            temperature=0,
-            model="sonar-pro",
-            api_key=perplexity_api_key
-        )
+        # Check for cached analysis first
+        cached_response = handle_cached_analysis(article.url)
+        if cached_response:
+            elapsed_time = time.time() - start_time
+            analysis_logger.info(f"Returned cached analysis in {elapsed_time:.2f} seconds")
+            return cached_response
         
-        print(f"[DEBUG] Starting language detection...")
-        # First, detect the language of the article
-        language_detection_prompt = f"""
-        Detect the language of this article content and respond with just the language name in English (e.g., "Spanish", "French", "German", "English", etc.):
+        # Process new analysis
+        response = process_new_analysis(article)
         
-        Title: {article.title}
-        Content: {article.content[:1000]}...
-        """
+        elapsed_time = time.time() - start_time
+        analysis_logger.info(f"Completed new analysis in {elapsed_time:.2f} seconds")
         
-        language_response = llm.invoke(language_detection_prompt)
-        detected_language = language_response.content.strip()
-        print(f"[DEBUG] Detected language: {detected_language}")
-        
-        print(f"[DEBUG] Generating search queries...")
-        # Create initial search prompt to find relevant information
-        search_prompt = f"""
-        I need to analyze an article and provide important context for the reader:
-        
-        Title: {article.title}
-        
-        Identify key claims, assertions, and perspectives in this article that would benefit from additional context. Focus on:
-        1. Claims that may be factually incomplete or misleading
-        2. Perspectives that may present only one side of an issue
-        3. Important historical or contextual information that's missing
-        4. Statistical data or facts that should be verified
-        5. Areas where political or ideological framing affects presentation
-        
-        Create specific search queries that will help find factual information about these claims.
-        Return only the search queries, one per line.
-        """
-        
-        # Get search queries for key claims
-        search_queries_response = llm.invoke(search_prompt)
-        search_queries = search_queries_response.content.strip().split('\n')
-        search_queries = [q.strip() for q in search_queries if q.strip()]
-        
-        
-        # Limit to top queries - reduced from 30 to 5 for faster processing
-        search_queries = search_queries[:5]
-        print(f"[DEBUG] Generated {len(search_queries)} search queries")
-        
-        # Bind structured output schema to the model
-        structured_llm = llm.with_structured_output(AnalysisOutput)
-        
-        print(f"[DEBUG] Starting fact-checking analysis...")
-        # Create the comprehensive fact-checking prompt leveraging Perplexity's search
-        fact_check_prompt = f"""
-        You are an impartial and highly discerning analyst. Your primary goal is to identify sections in news articles that could be biased, misleading, or cause a reader to misunderstand the facts. You must provide concise, valuable, and strictly factual explanations to clarify these points.
-        
-        IMPORTANT: The article is written in {detected_language}. You MUST respond in {detected_language}. All explanations and text should be in {detected_language}.
-        
-        Analyze this article carefully:
-        
-        Title: {article.title}
-        URL: {article.url}
-        Content: {article.content}
-        
-        Using the web, search for factual information related to the key points in this article, using these queries:
-        {' '.join(search_queries)}
-        
-        Identify sections of the article that meet any of the following criteria:
-        1. Information presented in a way that is biased or selectively framed.
-        2. Claims or statements that are potentially misleading or deceptive.
-        3. Sections where the omission of key facts could lead to a significant misunderstanding of the topic.
-        4. Content that, due to its presentation, might cause a reader to form an incorrect understanding of the actual events or issues.
-        
-        For each identified section:
-        1. Extract the exact text that is biased, misleading, or could cause misunderstanding.
-        2. Provide a CONCISE and strictly FACT-BASED explanation (2-3 lines maximum) in {detected_language} that clarifies the issue and presents the actual truth or necessary context. Ensure this explanation provides clear value to the user.
-        3. Assign a confidence score (0.0-1.0) for your assessment.
-        4. Include URLs of credible, factual sources that support your explanation and contradict or clarify the identified issue.
-        
-        Focus on providing accurate, factual information that corrects potential misunderstandings and counters biased or misleading content.
-        If there are no clear issues requiring clarification, return an empty list.
-        
-        Remember: ALL TEXT in your response must be in {detected_language}.
-        """
-        
-        # Generate structured analysis using Perplexity's built-in search capability
-        structured_result = structured_llm.invoke(fact_check_prompt)
-        print(f"[DEBUG] Analysis completed, found {len(structured_result.issues)} issues")
-
-        # Save the new analysis to MongoDB
-        new_analysis_document = ArticleAnalysisDocument(
-            url=article.url,
-            title=article.title,
-            content=article.content, # Storing full content, consider if truncation is needed for large articles
-            issues=structured_result.issues
-        )
-        
-        try:
-            article_analyses_collection.insert_one(new_analysis_document.model_dump())
-            print(f"Successfully saved analysis for URL: {article.url} to MongoDB.")
-        except Exception as e_db:
-            print(f"Error saving analysis to MongoDB for URL {article.url}: {e_db}")
-            # Decide if you want to raise an error or just log, here we log and continue
-            # raise HTTPException(status_code=500, detail=f"Failed to save analysis to database: {e_db}")
-
-        total_time = time.time() - start_time
-        print(f"[DEBUG] Total analysis time: {total_time:.2f} seconds")
-        return AnalysisResponse(issues=structured_result.issues)
+        return response
     
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        total_time = time.time() - start_time
-        print(f"[ERROR] Analysis failed after {total_time:.2f} seconds: {str(e)}")
+        elapsed_time = time.time() - start_time
+        analysis_logger.error(f"Analysis failed after {elapsed_time:.2f} seconds", error=e)
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run(
+        "main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.RELOAD
+    ) 
