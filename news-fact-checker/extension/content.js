@@ -164,9 +164,7 @@ function performHighlighting(issues) {
   
   // Process each issue
   issues.forEach((issue, originalIssueIndex) => {
-    if (originalIssueIndex === 0) { 
-      console.log('[content.js] Processing first issue (index 0):', issue.text); 
-    }
+    console.log(`[content.js] Processing issue ${originalIssueIndex}/${issues.length}: "${issue.text.substring(0, 100)}${issue.text.length > 100 ? '...' : ''}"`);
     
     try {
       // Normalize issue text for better matching
@@ -221,17 +219,36 @@ function performHighlighting(issues) {
       if (highlighted.success) {
         appliedHighlightsMap = appliedHighlightsMap.concat(highlighted.mappings);
         highlightCount += highlighted.count;
+        console.log(`[content.js] Successfully highlighted issue ${originalIssueIndex} with ${highlighted.count} highlights`);
       } else {
-        // Fallback: create a virtual highlight for clicking purposes
-        const virtualHighlightId = `truthpilot-virtual-${highlightCount}`;
-        appliedHighlightsMap.push({ 
-          originalIssueIndex: originalIssueIndex, 
-          highlightId: virtualHighlightId, 
-          matchFound: true,
-          isVirtual: true 
-        });
-        highlightCount++;
-        console.log(`[content.js] Created virtual highlight for issue ${originalIssueIndex}: ${virtualHighlightId}`);
+        // Try alternative matching strategies if the primary one failed
+        console.log(`[content.js] Primary matching failed for issue ${originalIssueIndex}, trying alternative strategies`);
+        
+        let alternativeSuccess = false;
+        const strategies = ['exact', 'case_insensitive', 'normalized', 'fuzzy'];
+        
+        for (const altStrategy of strategies) {
+          if (altStrategy === matchingStrategy) continue; // Skip the already-tried strategy
+          
+          const altHighlighted = highlightTextInNodes(issue, originalIssueIndex, altStrategy, highlightCount);
+          if (altHighlighted.success) {
+            appliedHighlightsMap = appliedHighlightsMap.concat(altHighlighted.mappings);
+            highlightCount += altHighlighted.count;
+            console.log(`[content.js] Alternative strategy '${altStrategy}' succeeded for issue ${originalIssueIndex}`);
+            alternativeSuccess = true;
+            break;
+          }
+        }
+        
+        if (!alternativeSuccess) {
+          console.warn(`[content.js] All matching strategies failed for issue ${originalIssueIndex}: "${issue.text.substring(0, 100)}..."`);
+          // Mark as not found instead of creating virtual highlights
+          appliedHighlightsMap.push({ 
+            originalIssueIndex: originalIssueIndex, 
+            highlightId: null, 
+            matchFound: false 
+          });
+        }
       }
       
     } catch (error) {
@@ -247,19 +264,45 @@ function performHighlighting(issues) {
 
 // Helper function to normalize text for better matching
 function normalizeText(text) {
-  return text.trim().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '');
+  return text.trim()
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/[''""]/g, '"') // Normalize quotes
+    .replace(/[–—]/g, '-') // Normalize dashes
+    .toLowerCase(); // Make case-insensitive but preserve punctuation for better matching
 }
 
 // Helper function to extract key words from issue text
 function extractKeyWords(text) {
-  // Remove common words and extract meaningful terms
-  const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those']);
+  // Enhanced stop words list
+  const commonWords = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 
+    'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 
+    'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+    'said', 'says', 'say', 'also', 'not', 'one', 'two', 'from', 'they', 'them', 'their',
+    'when', 'where', 'what', 'who', 'how', 'why', 'which', 'than', 'more', 'most', 'some',
+    'about', 'into', 'after', 'before', 'during', 'between', 'through', 'over', 'under'
+  ]);
   
-  return text.toLowerCase()
+  // Extract meaningful words with improved filtering
+  const words = text.toLowerCase()
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter(word => word.length > 3 && !commonWords.has(word))
-    .slice(0, 3); // Take up to 3 key words
+    .filter(word => {
+      // Keep words that are:
+      // - At least 3 characters long
+      // - Not common words
+      // - Contain at least one vowel (to avoid abbreviations like "LLC", "US", etc.)
+      // - Are not pure numbers
+      return word.length >= 3 && 
+             !commonWords.has(word) && 
+             /[aeiou]/.test(word) &&
+             !/^\d+$/.test(word);
+    });
+  
+  // Sort by length (longer words are often more meaningful) and take top 4
+  return words
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 4);
 }
 
 // Helper function to highlight text in actual DOM nodes
@@ -297,134 +340,167 @@ function highlightTextInNodes(issue, originalIssueIndex, matchingStrategy, start
     let textToHighlight = issue.text;
     let parts = [];
     
-    // Apply matching strategy
-    switch (matchingStrategy) {
-      case 'exact':
-        if (nodeText.includes(issue.text)) {
-          parts = nodeText.split(issue.text);
-          shouldHighlight = parts.length > 1;
-        }
-        break;
-        
-      case 'normalized':
-        const normalizedNodeText = normalizeText(nodeText);
-        const normalizedIssueText = normalizeText(issue.text);
-        if (normalizedNodeText.includes(normalizedIssueText)) {
-          // Find the actual position in original text
-          const match = findOriginalTextMatch(nodeText, issue.text);
-          if (match) {
-            parts = [nodeText.substring(0, match.start), nodeText.substring(match.end)];
-            textToHighlight = nodeText.substring(match.start, match.end);
-            shouldHighlight = true;
-          }
-        }
-        break;
-        
-      case 'case_insensitive':
-        const lowerNodeText = nodeText.toLowerCase();
-        const lowerIssueText = issue.text.toLowerCase();
-        const startIndex = lowerNodeText.indexOf(lowerIssueText);
-        if (startIndex !== -1) {
-          const endIndex = startIndex + issue.text.length;
-          parts = [nodeText.substring(0, startIndex), nodeText.substring(endIndex)];
-          textToHighlight = nodeText.substring(startIndex, endIndex);
-          shouldHighlight = true;
-        }
-        break;
-        
-      case 'fuzzy':
-        // For fuzzy matching, highlight if any key words are found
-        const keyWords = extractKeyWords(issue.text);
-        for (const word of keyWords) {
-          if (nodeText.toLowerCase().includes(word.toLowerCase())) {
-            const wordIndex = nodeText.toLowerCase().indexOf(word.toLowerCase());
-            const wordEnd = wordIndex + word.length;
-            parts = [nodeText.substring(0, wordIndex), nodeText.substring(wordEnd)];
-            textToHighlight = nodeText.substring(wordIndex, wordEnd);
-            shouldHighlight = true;
-            break;
-          }
-        }
-        break;
+    // Apply matching strategy with improved logic
+    const match = findBestMatchInNode(nodeText, issue.text, matchingStrategy);
+    if (match) {
+      shouldHighlight = true;
+      textToHighlight = nodeText.substring(match.start, match.end);
+      parts = [
+        nodeText.substring(0, match.start),
+        nodeText.substring(match.end)
+      ];
     }
     
-    if (shouldHighlight && parts.length > 1) {
+    if (shouldHighlight && parts.length >= 2) {
       foundAny = true;
       const parent = textNode.parentNode;
       const fragment = document.createDocumentFragment();
       
-      // Add the first part (if any)
+      // Add the text before the highlight
       if (parts[0]) {
         fragment.appendChild(document.createTextNode(parts[0]));
       }
       
       // Create the highlighted element
-      for (let i = 1; i < parts.length; i++) {
-        const newDomId = `truthpilot-highlight-${startingHighlightCount + highlightCount}`;
-        const highlightSpan = document.createElement('span');
-        highlightSpan.className = 'truthpilot-highlight';
-        highlightSpan.id = newDomId;
-        highlightSpan.textContent = textToHighlight;
-        
-        mappings.push({ originalIssueIndex: originalIssueIndex, highlightId: newDomId, matchFound: true });
-        highlightCount++;
-        
-        // Add tooltip (existing tooltip creation code)
-        createTooltipForHighlight(highlightSpan, issue);
-        
-        fragment.appendChild(highlightSpan);
-        
-        // Add the remaining part (if any)
-        if (parts[i]) {
-          fragment.appendChild(document.createTextNode(parts[i]));
-        }
+      const newDomId = `truthpilot-highlight-${startingHighlightCount + highlightCount}`;
+      const highlightSpan = document.createElement('span');
+      highlightSpan.className = 'truthpilot-highlight';
+      highlightSpan.id = newDomId;
+      highlightSpan.textContent = textToHighlight;
+      
+      mappings.push({ originalIssueIndex: originalIssueIndex, highlightId: newDomId, matchFound: true });
+      highlightCount++;
+      
+      // Add tooltip
+      createTooltipForHighlight(highlightSpan, issue);
+      fragment.appendChild(highlightSpan);
+      
+      // Add the text after the highlight
+      if (parts[1]) {
+        fragment.appendChild(document.createTextNode(parts[1]));
       }
       
       // Replace the original text node with the fragment
       parent.replaceChild(fragment, textNode);
       
-      // For efficiency, break after first successful highlight per issue
-      // Remove this break if you want to highlight all occurrences
-      break;
+      // Continue searching for more matches in other nodes instead of breaking
+      // This allows multiple occurrences of the same issue to be highlighted
     }
   }
   
   return { success: foundAny, mappings: mappings, count: highlightCount };
 }
 
+// Helper function to find the best match in a text node based on strategy
+function findBestMatchInNode(nodeText, issueText, strategy) {
+  switch (strategy) {
+    case 'exact':
+      const exactIndex = nodeText.indexOf(issueText);
+      if (exactIndex !== -1) {
+        return { start: exactIndex, end: exactIndex + issueText.length };
+      }
+      break;
+      
+    case 'case_insensitive':
+      const lowerNode = nodeText.toLowerCase();
+      const lowerIssue = issueText.toLowerCase();
+      const caseInsIndex = lowerNode.indexOf(lowerIssue);
+      if (caseInsIndex !== -1) {
+        return { start: caseInsIndex, end: caseInsIndex + issueText.length };
+      }
+      break;
+      
+    case 'normalized':
+    case 'fuzzy':
+      // Use the improved findOriginalTextMatch for complex matching
+      return findOriginalTextMatch(nodeText, issueText);
+  }
+  
+  return null;
+}
+
 // Helper function to find original text match position
 function findOriginalTextMatch(originalText, searchText) {
-  const normalizedOriginal = normalizeText(originalText).toLowerCase();
-  const normalizedSearch = normalizeText(searchText).toLowerCase();
-  const normalizedIndex = normalizedOriginal.indexOf(normalizedSearch);
+  // Try multiple approaches to find the best match
   
-  if (normalizedIndex === -1) return null;
+  // Approach 1: Direct case-insensitive match
+  const lowerOriginal = originalText.toLowerCase();
+  const lowerSearch = searchText.toLowerCase();
+  let index = lowerOriginal.indexOf(lowerSearch);
   
-  // Map back to original text position
-  let originalIndex = 0;
-  let normalizedPos = 0;
-  
-  while (originalIndex < originalText.length && normalizedPos < normalizedIndex) {
-    const char = originalText[originalIndex];
-    if (char.match(/\w/)) {
-      normalizedPos++;
-    }
-    originalIndex++;
+  if (index !== -1) {
+    return { start: index, end: index + searchText.length };
   }
   
-  // Find end position
-  let endIndex = originalIndex;
-  let remainingLength = normalizedSearch.replace(/\s+/g, '').length;
+  // Approach 2: Fuzzy matching with word boundaries
+  const searchWords = searchText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const originalWords = originalText.toLowerCase().split(/\s+/);
   
-  while (endIndex < originalText.length && remainingLength > 0) {
-    const char = originalText[endIndex];
-    if (char.match(/\w/)) {
-      remainingLength--;
+  // Find the best sequence of matching words
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  for (let i = 0; i < originalWords.length; i++) {
+    let matchedWords = 0;
+    let wordStartIndex = -1;
+    let wordEndIndex = -1;
+    
+    for (let j = 0; j < searchWords.length && (i + j) < originalWords.length; j++) {
+      const originalWord = originalWords[i + j];
+      const searchWord = searchWords[j];
+      
+      if (originalWord.includes(searchWord) || searchWord.includes(originalWord) || 
+          levenshteinDistance(originalWord, searchWord) <= Math.min(2, Math.floor(searchWord.length / 3))) {
+        matchedWords++;
+        if (wordStartIndex === -1) {
+          // Find the actual character position of this word in the original text
+          const wordsBeforeStart = originalWords.slice(0, i + j).join(' ');
+          wordStartIndex = wordsBeforeStart.length + (wordsBeforeStart.length > 0 ? 1 : 0);
+        }
+        const wordsUpToEnd = originalWords.slice(0, i + j + 1).join(' ');
+        wordEndIndex = wordsUpToEnd.length;
+      } else {
+        break; // Stop if we hit a non-matching word
+      }
     }
-    endIndex++;
+    
+    const score = matchedWords / searchWords.length;
+    if (score > bestScore && score > 0.5) { // At least 50% of words must match
+      bestScore = score;
+      bestMatch = { start: wordStartIndex, end: wordEndIndex };
+    }
   }
   
-  return { start: originalIndex, end: endIndex };
+  return bestMatch;
+}
+
+// Helper function to calculate edit distance for fuzzy matching
+function levenshteinDistance(str1, str2) {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
 }
 
 // Helper function to create tooltip for highlight
