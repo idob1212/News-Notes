@@ -58,7 +58,7 @@ def test_api():
                     print("   OPENAI_API_KEY=your_openai_key")
                     print("   PERPLEXITY_API_KEY=your_perplexity_key") 
                     print("   YDC_API_KEY=your_you_com_key")
-                    print("   MONGODB_CONNECTION_STRING=your_mongodb_string")
+                    print("   MONGODB_URL=your_mongodb_string")
                     
             except:
                 print(f"Raw response: {response.text}")

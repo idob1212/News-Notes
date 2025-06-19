@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful - News Notes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .success-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .success-title {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .success-subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+        }
+
+        .premium-features {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .features-title {
+            font-weight: bold;
+            color: #059669;
+            margin-bottom: 15px;
+        }
+
+        .features-list {
+            list-style: none;
+            text-align: left;
+        }
+
+        .features-list li {
+            padding: 5px 0;
+            color: #374151;
+            position: relative;
+            padding-left: 25px;
+        }
+
+        .features-list li:before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+
+        .footer-info {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-icon">🎉</div>
+        <h1 class="success-title">Payment Successful!</h1>
+        <p class="success-subtitle">Welcome to News Notes Premium</p>
+        
+        <div class="premium-features">
+            <div class="features-title">Your Premium Features Are Now Active:</div>
+            <ul class="features-list">
+                <li>Unlimited fact-checking analysis</li>
+                <li>Advanced AI-powered insights</li>
+                <li>Priority customer support</li>
+                <li>Export and save reports</li>
+                <li>Custom analysis settings</li>
+            </ul>
+        </div>
+
+        <div class="action-buttons">
+            <a href="#" class="btn btn-primary" onclick="openExtension()">
+                Start Using Premium
+            </a>
+            <a href="#" class="btn btn-secondary" onclick="closeWindow()">
+                Close Window
+            </a>
+        </div>
+
+        <div class="footer-info">
+            🔄 Your subscription will renew monthly<br>
+            📧 Receipt sent to your email<br>
+            ❓ Questions? Contact support
+        </div>
+    </div>
+
+    <script>
+        function openExtension() {
+            // Try to open the browser extension
+            if (window.chrome && chrome.runtime) {
+                // Running inside Chrome extension context
+                chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+                    chrome.tabs.update(tabs[0].id, {url: 'chrome-extension://your-extension-id/sidebar.html'});
+                });
+            } else {
+                // Fallback: provide instructions
+                alert('Please open your News Notes browser extension to start using Premium features!');
+                window.close();
+            }
+        }
+
+        function closeWindow() {
+            window.close();
+        }
+
+        // Auto-close after 10 seconds if user doesn't interact
+        setTimeout(() => {
+            const shouldClose = confirm('Payment successful! Close this window and return to News Notes?');
+            if (shouldClose) {
+                window.close();
+            }
+        }, 10000);
+    </script>
+</body>
+</html> 

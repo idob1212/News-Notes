@@ -34,7 +34,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["sidebar.html", "sidebar.js", "sidebar.css", "styles.css", "privacy_policy.html", "images/*"],
+      "resources": ["sidebar.html", "sidebar.js", "sidebar.css", "styles.css", "privacy_policy.html", "account.html", "account.js", "account.css", "images/*"],
       "matches": ["<all_urls>"]
     }
   ]

@@ -50,9 +50,9 @@ class Settings:
     @property
     def mongodb_connection_string(self) -> str:
         """Get MongoDB connection string from environment variables."""
-        connection_string = os.getenv("MONGODB_CONNECTION_STRING")
+        connection_string = os.getenv("MONGODB_URL")
         if not connection_string:
-            raise ValueError("MONGODB_CONNECTION_STRING must be set in environment variables")
+            raise ValueError("MONGODB_URL must be set in environment variables")
         return connection_string
 
 

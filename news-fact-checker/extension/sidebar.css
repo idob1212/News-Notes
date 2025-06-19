@@ -188,4 +188,70 @@ button:disabled {
 .sources a:hover {
   background-color: #e8f0fe;
   text-decoration: none;
+}
+
+/* Account Status Styles */
+.account-status {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 15px;
+}
+
+.account-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.plan-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #666;
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.plan-badge.premium {
+  background: #1a73e8;
+}
+
+.usage-text {
+  font-size: 12px;
+  color: #666;
+}
+
+.usage-text.warning {
+  color: #e68900;
+  font-weight: 500;
+}
+
+.usage-text.limit-reached {
+  color: #d93025;
+  font-weight: 500;
+}
+
+.manage-account-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  background: #f1f3f4;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  color: #333;
+  font-size: 12px;
+  text-decoration: none;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-bottom: 0;
+}
+
+.manage-account-btn:hover {
+  background: #e8eaed;
 } 

@@ -64,6 +64,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultCount = document.getElementById('resultCount');
   const issueList = document.getElementById('issueList');
   
+  // Account status elements
+  const accountStatus = document.getElementById('accountStatus');
+  const accountPlan = document.getElementById('accountPlan');
+  const accountUsage = document.getElementById('accountUsage');
+  const manageAccountBtn = document.getElementById('manageAccountBtn');
+  
   // Load configuration
   const config = loadConfig();
   
@@ -80,6 +86,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load any cached results
   loadCachedResults();
+  
+  // Load account status
+  loadAccountStatus();
   
   // Function to show the consent dialog
   function showConsentDialog() {
@@ -293,9 +302,69 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Show error message
   function showError(message) {
-    status.textContent = `Error: ${message}`;
+    status.innerHTML = `Error: ${message}`; // Changed from textContent to innerHTML to support links
     status.style.display = 'block';
     analyzeBtn.disabled = false;
+  }
+  
+  // Load and display account status
+  async function loadAccountStatus() {
+    try {
+      const authToken = await new Promise(resolve => {
+        chrome.storage.local.get(['authToken'], result => {
+          resolve(result.authToken);
+        });
+      });
+      
+      if (!authToken) {
+        accountStatus.style.display = 'none';
+        return;
+      }
+      
+      // Get user usage information
+      const response = await fetch(`${config.getBaseUrl()}/auth/usage`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Clear invalid token
+          chrome.storage.local.remove(['authToken']);
+        }
+        accountStatus.style.display = 'none';
+        return;
+      }
+      
+      const usage = await response.json();
+      
+      // Update account status display
+      accountPlan.textContent = usage.account_type.toUpperCase();
+      accountPlan.className = `plan-badge ${usage.account_type}`;
+      
+      // Update usage display
+      const usageLimit = usage.usage_limit === 999999 ? '∞' : usage.usage_limit;
+      accountUsage.textContent = `${usage.monthly_usage}/${usageLimit} this month`;
+      
+      // Update usage styling based on usage level
+      accountUsage.className = 'usage-text';
+      if (usage.account_type === 'free') {
+        const usagePercent = usage.monthly_usage / usage.usage_limit;
+        if (usagePercent >= 1) {
+          accountUsage.className += ' limit-reached';
+        } else if (usagePercent >= 0.8) {
+          accountUsage.className += ' warning';
+        }
+      }
+      
+      accountStatus.style.display = 'block';
+      
+    } catch (error) {
+      console.log('Failed to load account status:', error);
+      accountStatus.style.display = 'none';
+    }
   }
   
   // Load cached results for the current URL
@@ -421,8 +490,20 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
         
-        function performAnalysis() {
-          // Call the API with enhanced security
+        async function performAnalysis() {
+          // Check authentication before proceeding
+          const authToken = await new Promise(resolve => {
+            chrome.storage.local.get(['authToken'], result => {
+              resolve(result.authToken);
+            });
+          });
+          
+          if (!authToken) {
+            showError('Please sign in to use this feature. <a href="account.html" target="_blank">Sign in here</a>');
+            return;
+          }
+          
+          // Call the API with enhanced security and authentication
           const controller = new AbortController();
           const timeoutId = setTimeout(() => {
             console.log('[DEBUG] AbortController timeout triggered after 60 seconds');
@@ -435,16 +516,32 @@ document.addEventListener('DOMContentLoaded', () => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Requested-With': 'XMLHttpRequest'
+              'X-Requested-With': 'XMLHttpRequest',
+              'Authorization': `Bearer ${authToken}`
             },
             credentials: 'omit',
             body: JSON.stringify(article),
             signal: controller.signal
           })
-          .then(response => {
+          .then(async response => {
             console.log('[DEBUG] Fetch response received:', response.status, response.statusText);
             if (!response.ok) {
-              throw new Error(`API error: ${response.status}`);
+              // Handle specific error cases
+              if (response.status === 401) {
+                // Clear invalid token
+                chrome.storage.local.remove(['authToken']);
+                throw new Error('Your session has expired. Please <a href="account.html" target="_blank">sign in again</a>.');
+              } else if (response.status === 403) {
+                const errorData = await response.json();
+                if (errorData.detail && errorData.detail.includes('limit')) {
+                  throw new Error('Monthly analysis limit reached. <a href="account.html" target="_blank">Upgrade to Premium</a> for unlimited access.');
+                }
+                throw new Error('Access denied. Please check your account status.');
+              } else if (response.status === 429) {
+                throw new Error('Too many requests. Please wait a moment and try again.');
+              } else {
+                throw new Error(`API error: ${response.status}`);
+              }
             }
             return response.json();
           })
@@ -457,6 +554,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Cache the results for this URL
             cacheResults(tab.url, data.issues);
+            
+            // Refresh account status to show updated usage
+            loadAccountStatus();
             
             // Highlight issues on the page
             chrome.tabs.sendMessage(tab.id, {
@@ -503,5 +603,11 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       chrome.tabs.sendMessage(tabs[0].id, {action: 'closeSidebar'});
     });
+  });
+  
+  // Manage account button click handler
+  manageAccountBtn.addEventListener('click', () => {
+    // Open account management page in new tab
+    chrome.tabs.create({ url: chrome.runtime.getURL('account.html') });
   });
 }); 

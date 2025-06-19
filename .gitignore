@@ -1,5 +1,21 @@
-news-fact-checker/backend/.env
-news-fact-checker/backend/.env
-news-fact-checker/backend/__pycache__/main.cpython-310.pyc
-news-fact-checker/extension.zip
-news-fact-checker/extension.zip
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# MacOS
+.DS_Store
+
+# Environment variables
+.env
+.env.*
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+news-fact-checker/

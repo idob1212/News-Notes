@@ -40,12 +40,12 @@ pip install -r requirements.txt
 OPENAI_API_KEY=your_openai_api_key_here
 PERPLEXITY_API_KEY=your_perplexity_api_key_here
 YDC_API_KEY=your_you_api_key_here
-MONGODB_CONNECTION_STRING=your_mongodb_connection_string_here
+MONGODB_URL=your_mongodb_connection_string_here
 ```
    - `OPENAI_API_KEY`: Used for OpenAI services (fallback option).
    - `PERPLEXITY_API_KEY`: Used for Perplexity AI services (fallback option).
    - `YDC_API_KEY`: Required for the You.com API integration. The backend uses the official LangChain You.com integration (`langchain_community.llms.you.You`) to interact with the You.com Research API. This provides better stability and follows LangChain best practices.
-   - `MONGODB_CONNECTION_STRING`: Required to connect to your MongoDB instance for caching analysis results.
+   - `MONGODB_URL`: Required to connect to your MongoDB instance for caching analysis results.
 
    The project uses `langchain` (already listed in `requirements.txt`) to orchestrate interactions with language models.
 
