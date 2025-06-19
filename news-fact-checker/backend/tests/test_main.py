@@ -3,7 +3,7 @@ import os
 # Set environment variables BEFORE importing anything from main.py
 os.environ["PERPLEXITY_API_KEY"] = "test_key_123_for_testing" # Kept for now if other parts of main still reference it
 os.environ["YOU_API_KEY"] = "test_you_api_key_for_testing"
-os.environ["MONGODB_CONNECTION_STRING"] = "mongodb://mockhost:27017/testdb_for_testing"
+os.environ["MONGODB_URL"] = "mongodb://mockhost:27017/testdb_for_testing"
 
 import pytest
 import json # For creating JSON strings for mock LLM output
