@@ -469,25 +469,53 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const article = response.article;
         
-        // First, test basic connectivity to the API
-        console.log('[DEBUG] Testing API connectivity...');
-        fetch(config.getBaseUrl(), {
-          method: 'GET',
-          signal: AbortSignal.timeout(5000) // 5 second timeout for connectivity test
-        })
-        .then(connectResponse => {
-          console.log('[DEBUG] API connectivity test passed:', connectResponse.status);
+        // Check if we have cached results for this URL first
+        chrome.storage.local.get(['cachedResults'], function(result) {
+          const cachedResultsObj = result.cachedResults || {};
+          const cachedResult = cachedResultsObj[tab.url];
           
-          // Now proceed with the actual analysis
-          performAnalysis();
-        })
-        .catch(connectError => {
-          console.log('[DEBUG] API connectivity test failed:', connectError);
-          if (connectError.name === 'TimeoutError') {
-            showError('Cannot connect to analysis server (timeout). Please check your internet connection.');
-          } else {
-            showError('Cannot connect to analysis server. Please check your internet connection.');
+          if (cachedResult && cachedResult.length >= 0) {
+            console.log('[DEBUG] Found cached results, using cached data instead of API call');
+            status.style.display = 'none';
+            
+            // Highlight issues on the page using cached data
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'highlight',
+              issues: cachedResult
+            }, highlightResponse => {
+              console.log('[sidebar.js] Highlight response received for cached results:', highlightResponse);
+              
+              if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
+                console.warn('Failed to highlight cached issues on the page.', chrome.runtime.lastError);
+                showResults(cachedResult, []);
+              } else {
+                showResults(cachedResult, highlightResponse.appliedHighlightsMap);
+              }
+            });
+            return;
           }
+          
+          console.log('[DEBUG] No cached results found, proceeding with API call');
+          // First, test basic connectivity to the API
+          console.log('[DEBUG] Testing API connectivity...');
+          fetch(config.getBaseUrl(), {
+            method: 'GET',
+            signal: AbortSignal.timeout(15000) // Increased from 5000 to 15000 (15 seconds)
+          })
+          .then(connectResponse => {
+            console.log('[DEBUG] API connectivity test passed:', connectResponse.status);
+            
+            // Now proceed with the actual analysis
+            performAnalysis();
+          })
+          .catch(connectError => {
+            console.log('[DEBUG] API connectivity test failed:', connectError);
+            if (connectError.name === 'TimeoutError') {
+              showError('Cannot connect to analysis server (timeout). Please check your internet connection.');
+            } else {
+              showError('Cannot connect to analysis server. Please check your internet connection.');
+            }
+          });
         });
         
         async function performAnalysis() {
@@ -506,9 +534,9 @@ document.addEventListener('DOMContentLoaded', () => {
           // Call the API with enhanced security and authentication
           const controller = new AbortController();
           const timeoutId = setTimeout(() => {
-            console.log('[DEBUG] AbortController timeout triggered after 60 seconds');
+            console.log('[DEBUG] AbortController timeout triggered after 120 seconds');
             controller.abort();
-          }, 60000); // Increased from 30000 to 60000 (60 seconds)
+          }, 120000); // Increased from 60000 to 120000 (120 seconds for LLM processing)
           
           console.log('[DEBUG] Starting fetch request to:', config.getApiUrl());
           
@@ -583,9 +611,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // More specific error handling
             if (error.name === 'AbortError') {
-              showError('Request was cancelled (this may happen if the server takes too long to respond)');
+              showError('Analysis timed out. The server is taking longer than expected. This might be due to high server load or a complex article. Please try again in a few moments.');
             } else if (error.message.includes('Failed to fetch')) {
-              showError('Cannot connect to the analysis server. Please check your internet connection.');
+              showError('Cannot connect to the analysis server. Please check your internet connection and try again.');
+            } else if (error.message.includes('NetworkError')) {
+              showError('Network error occurred. Please check your internet connection and try again.');
             } else {
               showError(error.message);
             }

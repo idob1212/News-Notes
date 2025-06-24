@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
@@ -69,6 +69,15 @@ app.add_middleware(
     allow_headers=settings.ALLOWED_HEADERS,
 )
 
+# Add middleware to set timeout headers
+@app.middleware("http")
+async def add_timeout_headers(request: Request, call_next):
+    response = await call_next(request)
+    # Add headers to help with client-side timeout handling
+    response.headers["X-Request-Timeout"] = "120"  # Indicate server can handle 120 second requests
+    response.headers["X-Cache-Control"] = "no-cache"  # Prevent aggressive caching during dev
+    return response
+
 # Global variables for database and LLM
 article_analyses_collection = None
 users_collection = None
@@ -96,6 +105,7 @@ def initialize_services():
     users_collection.create_index("email", unique=True)
     users_collection.create_index("paddle_customer_id")
     users_collection.create_index("paddle_subscription_id")
+    users_collection.create_index("analyzed_articles")
     
     # Initialize Perplexity LLM
     perplexity_llm = setup_perplexity_llm()
@@ -205,6 +215,7 @@ async def register_user(user_data: UserCreate):
             "is_active": True,
             "monthly_usage": 0,
             "usage_reset_date": datetime.utcnow().replace(day=1) + timedelta(days=32),
+            "analyzed_articles": [],
             "paddle_customer_id": None,
             "paddle_subscription_id": None
         }
@@ -482,20 +493,23 @@ async def analyze_article(
         
         analysis_logger.info(f"Starting analysis for URL: {article.url} (User: {user.email})")
         
+        # Log request for debugging timeout issues
+        analysis_logger.debug(f"Request details - Title length: {len(article.title) if article.title else 0}, Content length: {len(article.content) if article.content else 0}")
+        
         # Check for cached analysis first
         cached_response = handle_cached_analysis(article.url)
         if cached_response:
-            # Still increment usage for cached results
-            increment_user_usage(users_collection, user.email)
+            # Increment usage only if this is a new article for the user
+            increment_user_usage(users_collection, user.email, article.url)
             elapsed_time = time.time() - start_time
-            analysis_logger.info(f"Returned cached analysis in {elapsed_time:.2f} seconds")
+            analysis_logger.info(f"Returned cached analysis in {elapsed_time:.2f} seconds (User: {user.email})")
             return cached_response
         
         # Process new analysis
         response = process_new_analysis(article)
         
-        # Increment user usage
-        increment_user_usage(users_collection, user.email)
+        # Increment user usage for new article
+        increment_user_usage(users_collection, user.email, article.url)
         
         elapsed_time = time.time() - start_time
         analysis_logger.info(f"Completed new analysis in {elapsed_time:.2f} seconds")
@@ -515,5 +529,7 @@ if __name__ == "__main__":
         "main:app",
         host=settings.HOST,
         port=settings.PORT,
-        reload=settings.RELOAD
+        reload=settings.RELOAD,
+        timeout_keep_alive=120,  # Keep connections alive for 120 seconds
+        timeout_graceful_shutdown=30  # Give 30 seconds for graceful shutdown
     ) 
