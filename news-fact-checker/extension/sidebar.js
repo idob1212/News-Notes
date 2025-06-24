@@ -216,12 +216,26 @@ document.addEventListener('DOMContentLoaded', () => {
         issueElement.dataset.highlightId = mappingEntry.highlightId;
         issueElement.style.cursor = 'pointer'; // Indicate it's clickable
         
+        // Add visual indicators based on match type
+        if (mappingEntry.isFallback) {
+          issueElement.classList.add('issue-fallback-highlight');
+          issueElement.title = 'Text approximation - click to see related content';
+        } else if (mappingEntry.confidence && mappingEntry.confidence < 0.8) {
+          issueElement.classList.add('issue-approximate-highlight');
+          issueElement.title = `Approximate match (${Math.round(mappingEntry.confidence * 100)}% confidence)`;
+        } else {
+          issueElement.classList.add('issue-exact-highlight');
+          issueElement.title = 'Click to highlight exact text on page';
+        }
+        
         issueElement.addEventListener('click', () => {
           const currentHighlightId = issueElement.dataset.highlightId;
           console.log('[sidebar.js] Issue clicked, highlightId:', currentHighlightId);
-          // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
-          // but good for safety.
+          
           if (currentHighlightId) { 
+            // Show immediate visual feedback
+            issueElement.style.background = '#e3f2fd';
+            
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
               if (tabs && tabs.length > 0) {
                 chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId }, (response) => {
@@ -229,22 +243,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error("Error sending scrollToHighlight message:", chrome.runtime.lastError.message);
                     // Visual feedback that click didn't work
                     issueElement.style.background = '#ffebee';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    setTimeout(() => issueElement.style.background = '', 1000);
                   } else if (!response || !response.success) {
                     console.error("ScrollToHighlight failed:", response?.error || "Unknown error");
                     // Visual feedback that scrolling failed
                     issueElement.style.background = '#ffebee';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    setTimeout(() => issueElement.style.background = '', 1000);
                   } else {
                     // Visual feedback that click worked
                     issueElement.style.background = '#e8f5e8';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    setTimeout(() => issueElement.style.background = '', 1000);
                   }
                 });
               } else {
                 console.error("Could not find active tab to send scrollToHighlight message.");
                 issueElement.style.background = '#ffebee';
-                setTimeout(() => issueElement.style.background = '', 500);
+                setTimeout(() => issueElement.style.background = '', 1000);
               }
             });
           }
@@ -252,6 +266,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         console.log(`[sidebar.js] Issue ${index} WILL NOT be made clickable.`);
         issueElement.classList.add('issue-not-scrollable');
+        issueElement.title = 'Text not found on page';
+        issueElement.style.opacity = '0.7';
       }
       
       const textElement = document.createElement('div');
