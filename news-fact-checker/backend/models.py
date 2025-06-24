@@ -121,4 +121,19 @@ class WebhookEvent(BaseModel):
     """Model for Paddle webhook events."""
     event_type: str = Field(description="Type of webhook event")
     data: dict = Field(description="Event data payload")
-    signature: str = Field(description="Webhook signature for verification") 
+    signature: str = Field(description="Webhook signature for verification")
+
+
+class SubscriptionConfirmation(BaseModel):
+    """Model for confirming subscription from frontend after payment."""
+    customer_id: str = Field(description="Paddle customer ID")
+    transaction_id: str = Field(description="Paddle transaction ID")
+    customer_email: str = Field(description="Customer email from payment")
+    subscription_id: Optional[str] = Field(default=None, description="Paddle subscription ID if available")
+
+
+class SubscriptionConfirmationResponse(BaseModel):
+    """Model for subscription confirmation response."""
+    success: bool = Field(description="Whether confirmation was successful")
+    message: str = Field(description="Confirmation message")
+    account_type: AccountType = Field(description="Updated account type") 
