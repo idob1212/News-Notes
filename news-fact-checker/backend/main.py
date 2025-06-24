@@ -6,6 +6,7 @@ import time
 import traceback
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import os
 
 from config import settings
 from logger import app_logger, analysis_logger
@@ -13,6 +14,7 @@ from models import (
     Issue, ArticleRequest, AnalysisResponse, 
     UserCreate, UserLogin, User, Token, UsageInfo,
     SubscriptionRequest, SubscriptionResponse, WebhookEvent,
+    SubscriptionConfirmation, SubscriptionConfirmationResponse,
     AccountType
 )
 from utils import (
@@ -379,16 +381,23 @@ async def create_subscription(
         )
         app_logger.info(f"Successfully created Paddle customer: {paddle_customer_id}")
     
-    # Create checkout URL
-    checkout_url = paddle_billing.create_subscription_checkout(
-        customer_id=paddle_customer_id,
-        success_url=subscription_request.success_url,
-        cancel_url=subscription_request.cancel_url
-    )
+    # Create checkout URL that redirects to our checkout page with parameters
+    from urllib.parse import urlencode
     
-    if not checkout_url:
-        app_logger.error(f"Failed to create checkout URL for customer: {paddle_customer_id}")
-        raise HTTPException(status_code=500, detail="Failed to create checkout")
+    checkout_params = {
+        "customer_id": paddle_customer_id
+    }
+    
+    # Add success and cancel URLs if provided
+    if subscription_request.success_url:
+        checkout_params["success_url"] = subscription_request.success_url
+    if subscription_request.cancel_url:
+        checkout_params["cancel_url"] = subscription_request.cancel_url
+    
+    # Create the checkout URL with parameters
+    checkout_url = f"https://thetruthpilot.com/checkout?{urlencode(checkout_params)}"
+    
+    app_logger.info(f"Created checkout URL for customer {paddle_customer_id}: {checkout_url}")
     
     return SubscriptionResponse(checkout_url=checkout_url)
 
@@ -453,6 +462,102 @@ async def handle_paddle_webhook(request: Request):
     except Exception as e:
         app_logger.error(f"Webhook processing error: {e}")
         raise HTTPException(status_code=500, detail="Webhook processing failed")
+
+@app.post("/billing/manual-upgrade")
+async def manual_upgrade_account(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Manually upgrade account to premium (for debugging payment issues)."""
+    user = await get_current_user(credentials, users_collection)
+    
+    # Get user document
+    user_doc = users_collection.find_one({"email": user.email})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if user has a paddle customer ID (indicating they tried to pay)
+    if not user_doc.get("paddle_customer_id"):
+        raise HTTPException(status_code=400, detail="No payment attempt found")
+    
+    # Upgrade to premium
+    result = users_collection.update_one(
+        {"email": user.email},
+        {"$set": {"account_type": AccountType.PREMIUM}}
+    )
+    
+    if result.modified_count > 0:
+        app_logger.info(f"Manually upgraded account to Premium: {user.email}")
+        return {"message": "Account upgraded to Premium", "account_type": "PREMIUM"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to upgrade account")
+
+@app.post("/billing/confirm-subscription", response_model=SubscriptionConfirmationResponse)
+async def confirm_subscription(confirmation: SubscriptionConfirmation):
+    """
+    Confirm subscription and upgrade account after successful payment.
+    This endpoint is called from the thank-you page to ensure account upgrade.
+    """
+    try:
+        # Find user by email and customer ID
+        user_doc = users_collection.find_one({
+            "email": confirmation.customer_email,
+            "paddle_customer_id": confirmation.customer_id
+        })
+        
+        if not user_doc:
+            app_logger.error(f"User not found for subscription confirmation: {confirmation.customer_email}, {confirmation.customer_id}")
+            raise HTTPException(status_code=404, detail="User not found with provided credentials")
+        
+        # Check if user is already premium
+        if user_doc.get("account_type") == AccountType.PREMIUM:
+            app_logger.info(f"User already has premium account: {confirmation.customer_email}")
+            return SubscriptionConfirmationResponse(
+                success=True,
+                message="Account is already premium",
+                account_type=AccountType.PREMIUM
+            )
+        
+        # Get subscription ID - either from confirmation or by fetching transaction details
+        subscription_id = None
+        if confirmation.subscription_id:
+            subscription_id = confirmation.subscription_id
+            app_logger.info(f"Using subscription ID from confirmation: {subscription_id}")
+        else:
+            # Try to get subscription ID from transaction details
+            app_logger.info(f"Fetching transaction details to get subscription ID: {confirmation.transaction_id}")
+            transaction_data = paddle_billing.get_transaction(confirmation.transaction_id)
+            if transaction_data:
+                subscription_id = transaction_data.get("subscription_id")
+                if subscription_id:
+                    app_logger.info(f"Found subscription ID from transaction: {subscription_id}")
+                else:
+                    app_logger.warning(f"No subscription ID found in transaction: {confirmation.transaction_id}")
+        
+        update_data = {"account_type": AccountType.PREMIUM}
+        if subscription_id:
+            update_data["paddle_subscription_id"] = subscription_id
+        
+        result = users_collection.update_one(
+            {"email": confirmation.customer_email, "paddle_customer_id": confirmation.customer_id},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count > 0:
+            app_logger.info(f"Successfully upgraded account to Premium via confirmation: {confirmation.customer_email}")
+            return SubscriptionConfirmationResponse(
+                success=True,
+                message="Account successfully upgraded to Premium",
+                account_type=AccountType.PREMIUM
+            )
+        else:
+            app_logger.error(f"Failed to upgrade account via confirmation: {confirmation.customer_email}")
+            raise HTTPException(status_code=500, detail="Failed to upgrade account")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Subscription confirmation error: {e}")
+        raise HTTPException(status_code=500, detail="Subscription confirmation failed")
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_article(
