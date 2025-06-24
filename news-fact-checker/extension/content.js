@@ -11,6 +11,108 @@ let sidebarFrame = null;
 let isSidebarOpen = false;
 let hideTooltipTimer = null; // Shared timer for tooltip hide delay
 
+// Enhanced text preprocessing for better matching
+function preprocessText(text) {
+  return text
+    .trim()
+    // Normalize Unicode characters
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Replace various quote marks with standard quotes
+    .replace(/[''‚‛`´]/g, "'")
+    .replace(/[""„‟«»]/g, '"')
+    // Replace various dashes with standard dash
+    .replace(/[–—―‒]/g, '-')
+    // Replace various apostrophes
+    .replace(/['']/g, "'")
+    // Normalize ellipsis
+    .replace(/…/g, '...')
+    // Replace non-breaking spaces with regular spaces
+    .replace(/\u00A0/g, ' ')
+    // Normalize multiple whitespace to single space
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Enhanced text similarity calculation using multiple algorithms
+function calculateTextSimilarity(str1, str2) {
+  // Preprocess both strings
+  const text1 = preprocessText(str1.toLowerCase());
+  const text2 = preprocessText(str2.toLowerCase());
+  
+  // Exact match gets highest score
+  if (text1 === text2) return 1.0;
+  
+  // Containment check
+  if (text1.includes(text2) || text2.includes(text1)) return 0.9;
+  
+  // Jaccard similarity based on words
+  const words1 = new Set(text1.split(/\s+/));
+  const words2 = new Set(text2.split(/\s+/));
+  const intersection = new Set([...words1].filter(word => words2.has(word)));
+  const union = new Set([...words1, ...words2]);
+  const jaccardScore = intersection.size / union.size;
+  
+  // Levenshtein distance normalized
+  const maxLength = Math.max(text1.length, text2.length);
+  const levenshteinScore = 1 - (levenshteinDistance(text1, text2) / maxLength);
+  
+  // Combined score with weights
+  return (jaccardScore * 0.6) + (levenshteinScore * 0.4);
+}
+
+// Enhanced key phrase extraction
+function extractKeyPhrases(text, minLength = 2) {
+  const stopWords = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+    'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did',
+    'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+    'said', 'says', 'say', 'also', 'not', 'one', 'two', 'from', 'they', 'them', 'their',
+    'when', 'where', 'what', 'who', 'how', 'why', 'which', 'than', 'more', 'most', 'some',
+    'about', 'into', 'after', 'before', 'during', 'between', 'through', 'over', 'under',
+    'very', 'just', 'only', 'even', 'back', 'any', 'good', 'new', 'first', 'last', 'long',
+    'great', 'little', 'own', 'other', 'old', 'right', 'big', 'high', 'different', 'small'
+  ]);
+  
+  const processed = preprocessText(text.toLowerCase());
+  
+  // Extract meaningful phrases (2-4 words) and single important words
+  const phrases = [];
+  const words = processed.split(/\s+/).filter(word => word.length >= minLength);
+  
+  // Single important words (longer, not stop words, contain vowels)
+  words.forEach(word => {
+    if (word.length >= 4 && !stopWords.has(word) && /[aeiou]/.test(word) && !/^\d+$/.test(word)) {
+      phrases.push(word);
+    }
+  });
+  
+  // Two-word phrases
+  for (let i = 0; i < words.length - 1; i++) {
+    const phrase = `${words[i]} ${words[i + 1]}`;
+    if (!stopWords.has(words[i]) && !stopWords.has(words[i + 1])) {
+      phrases.push(phrase);
+    }
+  }
+  
+  // Three-word phrases (more selective)
+  for (let i = 0; i < words.length - 2; i++) {
+    const hasStopWord = stopWords.has(words[i]) || stopWords.has(words[i + 1]) || stopWords.has(words[i + 2]);
+    if (!hasStopWord) {
+      phrases.push(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+    }
+  }
+  
+  // Sort by length and importance (longer phrases first, then unique words)
+  return phrases
+    .filter((phrase, index, arr) => arr.indexOf(phrase) === index) // Remove duplicates
+    .sort((a, b) => {
+      const lengthDiff = b.split(' ').length - a.split(' ').length;
+      if (lengthDiff !== 0) return lengthDiff;
+      return b.length - a.length;
+    })
+    .slice(0, 10); // Keep top 10 phrases
+}
+
 // Function to extract article content using Readability
 function extractArticleContent() {
   try {
@@ -101,7 +203,7 @@ function highlightIssues(issues) {
   });
 }
 
-// Extracted highlighting logic into a separate function
+// Enhanced highlighting logic with guaranteed fallback positioning
 function performHighlighting(issues) {
   // Add a style for the highlights
   const styleEl = document.createElement('style');
@@ -113,40 +215,39 @@ function performHighlighting(issues) {
       position: relative;
     }
     
+    .truthpilot-fallback-highlight {
+      background-color: rgba(255, 100, 100, 0.2);
+      cursor: pointer;
+      position: relative;
+      border: 1px dashed rgba(255, 100, 100, 0.5);
+      padding: 2px;
+      margin: 2px 0;
+      border-radius: 3px;
+    }
+    
     .truthpilot-tooltip {
-      visibility: hidden; /* Controlled by JS */
-      opacity: 0; /* Controlled by JS */
-      width: 300px; /* Default width */
+      visibility: hidden;
+      opacity: 0;
+      width: 300px;
       position: absolute;
-      z-index: 2147483647; /* Maximum z-index to ensure tooltip appears above everything */
+      z-index: 2147483647;
       transition: opacity 0.3s, visibility 0.3s;
-      /* Base styles will be refined by JS below */
       background-color: #ffffff; 
       color: #202124;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
       border-radius: 8px;
       padding: 15px;
-      font-size: 14px; /* Default font size for tooltip */
+      font-size: 14px;
       line-height: 1.5;
       text-align: left;
-      pointer-events: auto; /* Ensure tooltip can receive clicks */
+      pointer-events: auto;
     }
-    
-    /* CSS hover effect will be overridden by JS, but good as a fallback or for non-JS scenarios */
-    /*
-    .truthpilot-highlight:hover .truthpilot-tooltip {
-      visibility: visible;
-      opacity: 1;
-    }
-    */
     
     .truthpilot-sources {
-      /* Styles for sourcesDiv will be applied via JS */
-      font-size: 12px; /* Base size for source links, can be overridden by JS if needed */
+      font-size: 12px;
     }
     
     .truthpilot-sources a {
-      /* Styles for source links will be applied via JS */
       display: block;
       white-space: nowrap;
       overflow: hidden;
@@ -159,14 +260,253 @@ function performHighlighting(issues) {
   let appliedHighlightsMap = [];
   let highlightCount = 0;
   
+  // Get article containers for fallback positioning
+  const articleContainers = getArticleContainers();
+  
+  // Process each issue with enhanced matching
+  issues.forEach((issue, originalIssueIndex) => {
+    console.log(`[content.js] Processing issue ${originalIssueIndex}/${issues.length}: "${issue.text.substring(0, 100)}${issue.text.length > 100 ? '...' : ''}"`);
+    
+    try {
+      let matchResult = findBestTextMatch(issue.text);
+      
+      if (matchResult.found) {
+        console.log(`[content.js] Direct match found for issue ${originalIssueIndex} using ${matchResult.strategy} strategy`);
+        const highlighted = highlightTextInNodes(issue, originalIssueIndex, matchResult, highlightCount);
+        if (highlighted.success) {
+          appliedHighlightsMap = appliedHighlightsMap.concat(highlighted.mappings);
+          highlightCount += highlighted.count;
+          console.log(`[content.js] Successfully highlighted issue ${originalIssueIndex} with ${highlighted.count} highlights`);
+          return; // Success, move to next issue
+        }
+      }
+      
+      // If direct matching failed, try semantic/contextual matching
+      console.log(`[content.js] Direct matching failed for issue ${originalIssueIndex}, trying semantic matching`);
+      const semanticMatch = findSemanticMatch(issue.text);
+      if (semanticMatch.found) {
+        const highlighted = highlightTextInNodes(issue, originalIssueIndex, semanticMatch, highlightCount);
+        if (highlighted.success) {
+          appliedHighlightsMap = appliedHighlightsMap.concat(highlighted.mappings);
+          highlightCount += highlighted.count;
+          console.log(`[content.js] Successfully highlighted issue ${originalIssueIndex} using semantic matching`);
+          return; // Success, move to next issue
+        }
+      }
+      
+      // Final fallback: Create a guaranteed clickable area
+      console.log(`[content.js] All matching strategies failed for issue ${originalIssueIndex}, creating fallback highlight`);
+      const fallbackHighlight = createFallbackHighlight(issue, originalIssueIndex, highlightCount, articleContainers);
+      appliedHighlightsMap.push(fallbackHighlight.mapping);
+      highlightCount += 1;
+      console.log(`[content.js] Created fallback highlight for issue ${originalIssueIndex}`);
+      
+    } catch (error) {
+      console.error("Error highlighting issue:", error, issue);
+      // Even on error, create a fallback to ensure clickability
+      const fallbackHighlight = createFallbackHighlight(issue, originalIssueIndex, highlightCount, articleContainers);
+      appliedHighlightsMap.push(fallbackHighlight.mapping);
+      highlightCount += 1;
+    }
+  });
+  
+  console.log(`[content.js] Highlighting complete. Total mappings: ${appliedHighlightsMap.length}`);
+  return appliedHighlightsMap;
+}
+
+// Enhanced text matching with multiple strategies
+function findBestTextMatch(issueText) {
+  const bodyText = document.body.innerText || document.body.textContent || '';
+  const preprocessedIssue = preprocessText(issueText);
+  const preprocessedBody = preprocessText(bodyText);
+  
+  // Strategy 1: Exact match in preprocessed text
+  if (preprocessedBody.includes(preprocessedIssue)) {
+    const index = preprocessedBody.indexOf(preprocessedIssue);
+    return {
+      found: true,
+      strategy: 'exact_preprocessed',
+      text: issueText,
+      confidence: 1.0
+    };
+  }
+  
+  // Strategy 2: Case-insensitive match
+  const lowerIssue = preprocessedIssue.toLowerCase();
+  const lowerBody = preprocessedBody.toLowerCase();
+  if (lowerBody.includes(lowerIssue)) {
+    const index = lowerBody.indexOf(lowerIssue);
+    return {
+      found: true,
+      strategy: 'case_insensitive',
+      text: issueText,
+      confidence: 0.9
+    };
+  }
+  
+  // Strategy 3: Partial substring matching (for long quotes)
+  if (issueText.length > 50) {
+    // Try matching chunks of the issue text
+    const chunks = [];
+    const words = preprocessedIssue.split(/\s+/);
+    for (let i = 0; i < words.length - 4; i++) {
+      chunks.push(words.slice(i, i + 5).join(' '));
+    }
+    
+    for (const chunk of chunks) {
+      if (lowerBody.includes(chunk.toLowerCase())) {
+        return {
+          found: true,
+          strategy: 'partial_chunk',
+          text: chunk,
+          confidence: 0.7
+        };
+      }
+    }
+  }
+  
+  return { found: false, strategy: null, text: null, confidence: 0 };
+}
+
+// Semantic matching using key phrases and context
+function findSemanticMatch(issueText) {
+  const keyPhrases = extractKeyPhrases(issueText);
+  const bodyText = document.body.innerText || document.body.textContent || '';
+  const lowerBody = preprocessText(bodyText.toLowerCase());
+  
+  let bestMatch = { found: false, confidence: 0 };
+  
+  // Try to find key phrases in the body
+  for (const phrase of keyPhrases) {
+    const lowerPhrase = phrase.toLowerCase();
+    if (lowerBody.includes(lowerPhrase)) {
+      const confidence = 0.6 + (phrase.split(' ').length * 0.1); // Longer phrases get higher confidence
+      if (confidence > bestMatch.confidence) {
+        bestMatch = {
+          found: true,
+          strategy: 'semantic_phrase',
+          text: phrase,
+          confidence: confidence
+        };
+      }
+    }
+  }
+  
+  // If we found a semantic match with reasonable confidence, return it
+  if (bestMatch.confidence >= 0.6) {
+    return bestMatch;
+  }
+  
+  return { found: false, strategy: null, text: null, confidence: 0 };
+}
+
+// Get potential article container elements for fallback positioning
+function getArticleContainers() {
+  const selectors = [
+    'article',
+    '[role="main"]',
+    '.article-content',
+    '.post-content',
+    '.entry-content',
+    '.story-body',
+    '.article-body',
+    '.content',
+    'main',
+    '#content',
+    '#main'
+  ];
+  
+  const containers = [];
+  for (const selector of selectors) {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach(el => {
+      if (el.offsetHeight > 100 && el.innerText.length > 200) { // Must be substantial
+        containers.push(el);
+      }
+    });
+  }
+  
+  // If no specific containers found, use body
+  if (containers.length === 0) {
+    containers.push(document.body);
+  }
+  
+  return containers;
+}
+
+// Create a guaranteed fallback highlight that's always clickable
+function createFallbackHighlight(issue, originalIssueIndex, highlightCount, articleContainers) {
+  const fallbackId = `truthpilot-highlight-${highlightCount}`;
+  
+  // Find the best container (prefer the one with most text)
+  const bestContainer = articleContainers.reduce((best, container) => {
+    return (container.innerText || '').length > (best.innerText || '').length ? container : best;
+  }, articleContainers[0]);
+  
+  // Create a fallback highlight element at the beginning of the article
+  const fallbackElement = document.createElement('div');
+  fallbackElement.id = fallbackId;
+  fallbackElement.className = 'truthpilot-fallback-highlight';
+  fallbackElement.innerHTML = `
+    <strong>📍 Issue Found:</strong> ${issue.text.substring(0, 80)}${issue.text.length > 80 ? '...' : ''}
+    <br><small style="color: #666;">Click to view details (text may not be highlighted on page)</small>
+  `;
+  
+  // Style the fallback element
+  fallbackElement.style.cssText = `
+    background-color: rgba(255, 165, 0, 0.1);
+    border-left: 4px solid #ff6b35;
+    padding: 8px 12px;
+    margin: 8px 0;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  `;
+  
+  // Add hover effect
+  fallbackElement.addEventListener('mouseenter', () => {
+    fallbackElement.style.backgroundColor = 'rgba(255, 165, 0, 0.2)';
+    fallbackElement.style.transform = 'translateX(4px)';
+  });
+  
+  fallbackElement.addEventListener('mouseleave', () => {
+    fallbackElement.style.backgroundColor = 'rgba(255, 165, 0, 0.1)';
+    fallbackElement.style.transform = 'translateX(0)';
+  });
+  
+  // Add tooltip functionality
+  createTooltipForHighlight(fallbackElement, issue);
+  
+  // Insert at the beginning of the best container
+  if (bestContainer.firstChild) {
+    bestContainer.insertBefore(fallbackElement, bestContainer.firstChild);
+  } else {
+    bestContainer.appendChild(fallbackElement);
+  }
+  
+  return {
+    mapping: { 
+      originalIssueIndex: originalIssueIndex, 
+      highlightId: fallbackId, 
+      matchFound: true, // Mark as found since we created a clickable element
+      isFallback: true 
+    }
+  };
+}
+
+// ... existing code ...
+  
+  let appliedHighlightsMap = [];
+  let highlightCount = 0;
+  
   // Get the entire body text for better cross-element matching
   const bodyText = document.body.innerText || document.body.textContent || '';
   
   // Process each issue
   issues.forEach((issue, originalIssueIndex) => {
-    if (originalIssueIndex === 0) { 
-      console.log('[content.js] Processing first issue (index 0):', issue.text); 
-    }
+    console.log(`[content.js] Processing issue ${originalIssueIndex}/${issues.length}: "${issue.text.substring(0, 100)}${issue.text.length > 100 ? '...' : ''}"`);
     
     try {
       // Normalize issue text for better matching
@@ -221,17 +561,36 @@ function performHighlighting(issues) {
       if (highlighted.success) {
         appliedHighlightsMap = appliedHighlightsMap.concat(highlighted.mappings);
         highlightCount += highlighted.count;
+        console.log(`[content.js] Successfully highlighted issue ${originalIssueIndex} with ${highlighted.count} highlights`);
       } else {
-        // Fallback: create a virtual highlight for clicking purposes
-        const virtualHighlightId = `truthpilot-virtual-${highlightCount}`;
-        appliedHighlightsMap.push({ 
-          originalIssueIndex: originalIssueIndex, 
-          highlightId: virtualHighlightId, 
-          matchFound: true,
-          isVirtual: true 
-        });
-        highlightCount++;
-        console.log(`[content.js] Created virtual highlight for issue ${originalIssueIndex}: ${virtualHighlightId}`);
+        // Try alternative matching strategies if the primary one failed
+        console.log(`[content.js] Primary matching failed for issue ${originalIssueIndex}, trying alternative strategies`);
+        
+        let alternativeSuccess = false;
+        const strategies = ['exact', 'case_insensitive', 'normalized', 'fuzzy'];
+        
+        for (const altStrategy of strategies) {
+          if (altStrategy === matchingStrategy) continue; // Skip the already-tried strategy
+          
+          const altHighlighted = highlightTextInNodes(issue, originalIssueIndex, altStrategy, highlightCount);
+          if (altHighlighted.success) {
+            appliedHighlightsMap = appliedHighlightsMap.concat(altHighlighted.mappings);
+            highlightCount += altHighlighted.count;
+            console.log(`[content.js] Alternative strategy '${altStrategy}' succeeded for issue ${originalIssueIndex}`);
+            alternativeSuccess = true;
+            break;
+          }
+        }
+        
+        if (!alternativeSuccess) {
+          console.warn(`[content.js] All matching strategies failed for issue ${originalIssueIndex}: "${issue.text.substring(0, 100)}..."`);
+          // Mark as not found instead of creating virtual highlights
+          appliedHighlightsMap.push({ 
+            originalIssueIndex: originalIssueIndex, 
+            highlightId: null, 
+            matchFound: false 
+          });
+        }
       }
       
     } catch (error) {
@@ -247,23 +606,49 @@ function performHighlighting(issues) {
 
 // Helper function to normalize text for better matching
 function normalizeText(text) {
-  return text.trim().replace(/\s+/g, ' ').replace(/[^\w\s]/g, '');
+  return text.trim()
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/[''""]/g, '"') // Normalize quotes
+    .replace(/[–—]/g, '-') // Normalize dashes
+    .toLowerCase(); // Make case-insensitive but preserve punctuation for better matching
 }
 
 // Helper function to extract key words from issue text
 function extractKeyWords(text) {
-  // Remove common words and extract meaningful terms
-  const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those']);
+  // Enhanced stop words list
+  const commonWords = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 
+    'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 
+    'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+    'said', 'says', 'say', 'also', 'not', 'one', 'two', 'from', 'they', 'them', 'their',
+    'when', 'where', 'what', 'who', 'how', 'why', 'which', 'than', 'more', 'most', 'some',
+    'about', 'into', 'after', 'before', 'during', 'between', 'through', 'over', 'under'
+  ]);
   
-  return text.toLowerCase()
+  // Extract meaningful words with improved filtering
+  const words = text.toLowerCase()
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter(word => word.length > 3 && !commonWords.has(word))
-    .slice(0, 3); // Take up to 3 key words
+    .filter(word => {
+      // Keep words that are:
+      // - At least 3 characters long
+      // - Not common words
+      // - Contain at least one vowel (to avoid abbreviations like "LLC", "US", etc.)
+      // - Are not pure numbers
+      return word.length >= 3 && 
+             !commonWords.has(word) && 
+             /[aeiou]/.test(word) &&
+             !/^\d+$/.test(word);
+    });
+  
+  // Sort by length (longer words are often more meaningful) and take top 4
+  return words
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 4);
 }
 
-// Helper function to highlight text in actual DOM nodes
-function highlightTextInNodes(issue, originalIssueIndex, matchingStrategy, startingHighlightCount) {
+// Enhanced function to highlight text in actual DOM nodes with improved matching
+function highlightTextInNodes(issue, originalIssueIndex, matchResult, startingHighlightCount) {
   let highlightCount = 0;
   let mappings = [];
   let foundAny = false;
@@ -283,148 +668,268 @@ function highlightTextInNodes(issue, originalIssueIndex, matchingStrategy, start
     if (
       node.parentElement.tagName === 'SCRIPT' ||
       node.parentElement.tagName === 'STYLE' ||
-      node.parentElement.classList.contains('truthpilot-highlight')
+      node.parentElement.classList.contains('truthpilot-highlight') ||
+      node.parentElement.classList.contains('truthpilot-fallback-highlight')
     ) {
       continue;
     }
     textNodes.push(node);
   }
   
+  // Use the text from matchResult for more precise highlighting
+  const searchText = matchResult.text || issue.text;
+  
   // Try to find and highlight the text
   for (const textNode of textNodes) {
     const nodeText = textNode.textContent || "";
     let shouldHighlight = false;
-    let textToHighlight = issue.text;
+    let textToHighlight = searchText;
     let parts = [];
     
-    // Apply matching strategy
-    switch (matchingStrategy) {
-      case 'exact':
-        if (nodeText.includes(issue.text)) {
-          parts = nodeText.split(issue.text);
-          shouldHighlight = parts.length > 1;
-        }
-        break;
-        
-      case 'normalized':
-        const normalizedNodeText = normalizeText(nodeText);
-        const normalizedIssueText = normalizeText(issue.text);
-        if (normalizedNodeText.includes(normalizedIssueText)) {
-          // Find the actual position in original text
-          const match = findOriginalTextMatch(nodeText, issue.text);
-          if (match) {
-            parts = [nodeText.substring(0, match.start), nodeText.substring(match.end)];
-            textToHighlight = nodeText.substring(match.start, match.end);
-            shouldHighlight = true;
-          }
-        }
-        break;
-        
-      case 'case_insensitive':
-        const lowerNodeText = nodeText.toLowerCase();
-        const lowerIssueText = issue.text.toLowerCase();
-        const startIndex = lowerNodeText.indexOf(lowerIssueText);
-        if (startIndex !== -1) {
-          const endIndex = startIndex + issue.text.length;
-          parts = [nodeText.substring(0, startIndex), nodeText.substring(endIndex)];
-          textToHighlight = nodeText.substring(startIndex, endIndex);
-          shouldHighlight = true;
-        }
-        break;
-        
-      case 'fuzzy':
-        // For fuzzy matching, highlight if any key words are found
-        const keyWords = extractKeyWords(issue.text);
-        for (const word of keyWords) {
-          if (nodeText.toLowerCase().includes(word.toLowerCase())) {
-            const wordIndex = nodeText.toLowerCase().indexOf(word.toLowerCase());
-            const wordEnd = wordIndex + word.length;
-            parts = [nodeText.substring(0, wordIndex), nodeText.substring(wordEnd)];
-            textToHighlight = nodeText.substring(wordIndex, wordEnd);
-            shouldHighlight = true;
-            break;
-          }
-        }
-        break;
+    // Apply enhanced matching logic based on strategy
+    const match = findEnhancedMatchInNode(nodeText, searchText, matchResult.strategy);
+    if (match) {
+      shouldHighlight = true;
+      textToHighlight = nodeText.substring(match.start, match.end);
+      parts = [
+        nodeText.substring(0, match.start),
+        nodeText.substring(match.end)
+      ];
     }
     
-    if (shouldHighlight && parts.length > 1) {
+    if (shouldHighlight && parts.length >= 2) {
       foundAny = true;
       const parent = textNode.parentNode;
       const fragment = document.createDocumentFragment();
       
-      // Add the first part (if any)
+      // Add the text before the highlight
       if (parts[0]) {
         fragment.appendChild(document.createTextNode(parts[0]));
       }
       
       // Create the highlighted element
-      for (let i = 1; i < parts.length; i++) {
-        const newDomId = `truthpilot-highlight-${startingHighlightCount + highlightCount}`;
-        const highlightSpan = document.createElement('span');
-        highlightSpan.className = 'truthpilot-highlight';
-        highlightSpan.id = newDomId;
-        highlightSpan.textContent = textToHighlight;
-        
-        mappings.push({ originalIssueIndex: originalIssueIndex, highlightId: newDomId, matchFound: true });
-        highlightCount++;
-        
-        // Add tooltip (existing tooltip creation code)
-        createTooltipForHighlight(highlightSpan, issue);
-        
-        fragment.appendChild(highlightSpan);
-        
-        // Add the remaining part (if any)
-        if (parts[i]) {
-          fragment.appendChild(document.createTextNode(parts[i]));
-        }
+      const newDomId = `truthpilot-highlight-${startingHighlightCount + highlightCount}`;
+      const highlightSpan = document.createElement('span');
+      highlightSpan.className = 'truthpilot-highlight';
+      highlightSpan.id = newDomId;
+      highlightSpan.textContent = textToHighlight;
+      
+      mappings.push({ 
+        originalIssueIndex: originalIssueIndex, 
+        highlightId: newDomId, 
+        matchFound: true,
+        confidence: matchResult.confidence || 1.0,
+        strategy: matchResult.strategy
+      });
+      highlightCount++;
+      
+      // Add tooltip
+      createTooltipForHighlight(highlightSpan, issue);
+      fragment.appendChild(highlightSpan);
+      
+      // Add the text after the highlight
+      if (parts[1]) {
+        fragment.appendChild(document.createTextNode(parts[1]));
       }
       
       // Replace the original text node with the fragment
       parent.replaceChild(fragment, textNode);
       
-      // For efficiency, break after first successful highlight per issue
-      // Remove this break if you want to highlight all occurrences
-      break;
+      // For high-confidence exact matches, stop after first match to avoid over-highlighting
+      // For lower-confidence matches, continue to find all instances
+      if (matchResult.confidence >= 0.9) {
+        break;
+      }
     }
   }
   
   return { success: foundAny, mappings: mappings, count: highlightCount };
 }
 
+// Enhanced node-level matching with preprocessing
+function findEnhancedMatchInNode(nodeText, searchText, strategy) {
+  switch (strategy) {
+    case 'exact_preprocessed':
+      const preprocessedNode = preprocessText(nodeText);
+      const preprocessedSearch = preprocessText(searchText);
+      const exactIndex = preprocessedNode.indexOf(preprocessedSearch);
+      if (exactIndex !== -1) {
+        // Map back to original positions (approximation)
+        const originalIndex = nodeText.toLowerCase().indexOf(searchText.toLowerCase());
+        if (originalIndex !== -1) {
+          return { start: originalIndex, end: originalIndex + searchText.length };
+        }
+      }
+      break;
+      
+    case 'case_insensitive':
+      const lowerNode = nodeText.toLowerCase();
+      const lowerSearch = searchText.toLowerCase();
+      const caseInsIndex = lowerNode.indexOf(lowerSearch);
+      if (caseInsIndex !== -1) {
+        return { start: caseInsIndex, end: caseInsIndex + searchText.length };
+      }
+      break;
+      
+    case 'partial_chunk':
+    case 'semantic_phrase':
+      // For semantic/partial matches, find the best approximation
+      const normalizedNode = preprocessText(nodeText.toLowerCase());
+      const normalizedSearch = preprocessText(searchText.toLowerCase());
+      const semanticIndex = normalizedNode.indexOf(normalizedSearch);
+      if (semanticIndex !== -1) {
+        // Try to find the closest match in the original text
+        const originalMatch = findClosestOriginalMatch(nodeText, searchText);
+        if (originalMatch) {
+          return originalMatch;
+        }
+      }
+      break;
+      
+    default:
+      // Fallback to original matching logic
+      return findBestMatchInNode(nodeText, searchText, strategy);
+  }
+  
+  return null;
+}
+
+// Helper to find closest match in original text for semantic matches
+function findClosestOriginalMatch(originalText, searchText) {
+  const originalLower = originalText.toLowerCase();
+  const searchLower = searchText.toLowerCase();
+  
+  // Try different word combinations from the search text
+  const searchWords = searchLower.split(/\s+/);
+  
+  for (let i = 0; i < searchWords.length; i++) {
+    for (let j = i + 1; j <= searchWords.length; j++) {
+      const phrase = searchWords.slice(i, j).join(' ');
+      if (phrase.length > 3) { // Only consider substantial phrases
+        const phraseIndex = originalLower.indexOf(phrase);
+        if (phraseIndex !== -1) {
+          return { 
+            start: phraseIndex, 
+            end: phraseIndex + phrase.length 
+          };
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
+// Helper function to find the best match in a text node based on strategy
+function findBestMatchInNode(nodeText, issueText, strategy) {
+  switch (strategy) {
+    case 'exact':
+      const exactIndex = nodeText.indexOf(issueText);
+      if (exactIndex !== -1) {
+        return { start: exactIndex, end: exactIndex + issueText.length };
+      }
+      break;
+      
+    case 'case_insensitive':
+      const lowerNode = nodeText.toLowerCase();
+      const lowerIssue = issueText.toLowerCase();
+      const caseInsIndex = lowerNode.indexOf(lowerIssue);
+      if (caseInsIndex !== -1) {
+        return { start: caseInsIndex, end: caseInsIndex + issueText.length };
+      }
+      break;
+      
+    case 'normalized':
+    case 'fuzzy':
+      // Use the improved findOriginalTextMatch for complex matching
+      return findOriginalTextMatch(nodeText, issueText);
+  }
+  
+  return null;
+}
+
 // Helper function to find original text match position
 function findOriginalTextMatch(originalText, searchText) {
-  const normalizedOriginal = normalizeText(originalText).toLowerCase();
-  const normalizedSearch = normalizeText(searchText).toLowerCase();
-  const normalizedIndex = normalizedOriginal.indexOf(normalizedSearch);
+  // Try multiple approaches to find the best match
   
-  if (normalizedIndex === -1) return null;
+  // Approach 1: Direct case-insensitive match
+  const lowerOriginal = originalText.toLowerCase();
+  const lowerSearch = searchText.toLowerCase();
+  let index = lowerOriginal.indexOf(lowerSearch);
   
-  // Map back to original text position
-  let originalIndex = 0;
-  let normalizedPos = 0;
-  
-  while (originalIndex < originalText.length && normalizedPos < normalizedIndex) {
-    const char = originalText[originalIndex];
-    if (char.match(/\w/)) {
-      normalizedPos++;
-    }
-    originalIndex++;
+  if (index !== -1) {
+    return { start: index, end: index + searchText.length };
   }
   
-  // Find end position
-  let endIndex = originalIndex;
-  let remainingLength = normalizedSearch.replace(/\s+/g, '').length;
+  // Approach 2: Fuzzy matching with word boundaries
+  const searchWords = searchText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const originalWords = originalText.toLowerCase().split(/\s+/);
   
-  while (endIndex < originalText.length && remainingLength > 0) {
-    const char = originalText[endIndex];
-    if (char.match(/\w/)) {
-      remainingLength--;
+  // Find the best sequence of matching words
+  let bestMatch = null;
+  let bestScore = 0;
+  
+  for (let i = 0; i < originalWords.length; i++) {
+    let matchedWords = 0;
+    let wordStartIndex = -1;
+    let wordEndIndex = -1;
+    
+    for (let j = 0; j < searchWords.length && (i + j) < originalWords.length; j++) {
+      const originalWord = originalWords[i + j];
+      const searchWord = searchWords[j];
+      
+      if (originalWord.includes(searchWord) || searchWord.includes(originalWord) || 
+          levenshteinDistance(originalWord, searchWord) <= Math.min(2, Math.floor(searchWord.length / 3))) {
+        matchedWords++;
+        if (wordStartIndex === -1) {
+          // Find the actual character position of this word in the original text
+          const wordsBeforeStart = originalWords.slice(0, i + j).join(' ');
+          wordStartIndex = wordsBeforeStart.length + (wordsBeforeStart.length > 0 ? 1 : 0);
+        }
+        const wordsUpToEnd = originalWords.slice(0, i + j + 1).join(' ');
+        wordEndIndex = wordsUpToEnd.length;
+      } else {
+        break; // Stop if we hit a non-matching word
+      }
     }
-    endIndex++;
+    
+    const score = matchedWords / searchWords.length;
+    if (score > bestScore && score > 0.5) { // At least 50% of words must match
+      bestScore = score;
+      bestMatch = { start: wordStartIndex, end: wordEndIndex };
+    }
   }
   
-  return { start: originalIndex, end: endIndex };
+  return bestMatch;
+}
+
+// Helper function to calculate edit distance for fuzzy matching
+function levenshteinDistance(str1, str2) {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
 }
 
 // Helper function to create tooltip for highlight

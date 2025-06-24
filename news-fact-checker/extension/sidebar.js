@@ -216,12 +216,26 @@ document.addEventListener('DOMContentLoaded', () => {
         issueElement.dataset.highlightId = mappingEntry.highlightId;
         issueElement.style.cursor = 'pointer'; // Indicate it's clickable
         
+        // Add visual indicators based on match type
+        if (mappingEntry.isFallback) {
+          issueElement.classList.add('issue-fallback-highlight');
+          issueElement.title = 'Text approximation - click to see related content';
+        } else if (mappingEntry.confidence && mappingEntry.confidence < 0.8) {
+          issueElement.classList.add('issue-approximate-highlight');
+          issueElement.title = `Approximate match (${Math.round(mappingEntry.confidence * 100)}% confidence)`;
+        } else {
+          issueElement.classList.add('issue-exact-highlight');
+          issueElement.title = 'Click to highlight exact text on page';
+        }
+        
         issueElement.addEventListener('click', () => {
           const currentHighlightId = issueElement.dataset.highlightId;
           console.log('[sidebar.js] Issue clicked, highlightId:', currentHighlightId);
-          // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
-          // but good for safety.
+          
           if (currentHighlightId) { 
+            // Show immediate visual feedback
+            issueElement.style.background = '#e3f2fd';
+            
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
               if (tabs && tabs.length > 0) {
                 chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId }, (response) => {
@@ -229,22 +243,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error("Error sending scrollToHighlight message:", chrome.runtime.lastError.message);
                     // Visual feedback that click didn't work
                     issueElement.style.background = '#ffebee';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    setTimeout(() => issueElement.style.background = '', 1000);
                   } else if (!response || !response.success) {
                     console.error("ScrollToHighlight failed:", response?.error || "Unknown error");
                     // Visual feedback that scrolling failed
                     issueElement.style.background = '#ffebee';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    setTimeout(() => issueElement.style.background = '', 1000);
                   } else {
                     // Visual feedback that click worked
                     issueElement.style.background = '#e8f5e8';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    setTimeout(() => issueElement.style.background = '', 1000);
                   }
                 });
               } else {
                 console.error("Could not find active tab to send scrollToHighlight message.");
                 issueElement.style.background = '#ffebee';
-                setTimeout(() => issueElement.style.background = '', 500);
+                setTimeout(() => issueElement.style.background = '', 1000);
               }
             });
           }
@@ -252,6 +266,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         console.log(`[sidebar.js] Issue ${index} WILL NOT be made clickable.`);
         issueElement.classList.add('issue-not-scrollable');
+        issueElement.title = 'Text not found on page';
+        issueElement.style.opacity = '0.7';
       }
       
       const textElement = document.createElement('div');
@@ -469,25 +485,53 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const article = response.article;
         
-        // First, test basic connectivity to the API
-        console.log('[DEBUG] Testing API connectivity...');
-        fetch(config.getBaseUrl(), {
-          method: 'GET',
-          signal: AbortSignal.timeout(5000) // 5 second timeout for connectivity test
-        })
-        .then(connectResponse => {
-          console.log('[DEBUG] API connectivity test passed:', connectResponse.status);
+        // Check if we have cached results for this URL first
+        chrome.storage.local.get(['cachedResults'], function(result) {
+          const cachedResultsObj = result.cachedResults || {};
+          const cachedResult = cachedResultsObj[tab.url];
           
-          // Now proceed with the actual analysis
-          performAnalysis();
-        })
-        .catch(connectError => {
-          console.log('[DEBUG] API connectivity test failed:', connectError);
-          if (connectError.name === 'TimeoutError') {
-            showError('Cannot connect to analysis server (timeout). Please check your internet connection.');
-          } else {
-            showError('Cannot connect to analysis server. Please check your internet connection.');
+          if (cachedResult && cachedResult.length >= 0) {
+            console.log('[DEBUG] Found cached results, using cached data instead of API call');
+            status.style.display = 'none';
+            
+            // Highlight issues on the page using cached data
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'highlight',
+              issues: cachedResult
+            }, highlightResponse => {
+              console.log('[sidebar.js] Highlight response received for cached results:', highlightResponse);
+              
+              if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
+                console.warn('Failed to highlight cached issues on the page.', chrome.runtime.lastError);
+                showResults(cachedResult, []);
+              } else {
+                showResults(cachedResult, highlightResponse.appliedHighlightsMap);
+              }
+            });
+            return;
           }
+          
+          console.log('[DEBUG] No cached results found, proceeding with API call');
+          // First, test basic connectivity to the API
+          console.log('[DEBUG] Testing API connectivity...');
+          fetch(config.getBaseUrl(), {
+            method: 'GET',
+            signal: AbortSignal.timeout(15000) // Increased from 5000 to 15000 (15 seconds)
+          })
+          .then(connectResponse => {
+            console.log('[DEBUG] API connectivity test passed:', connectResponse.status);
+            
+            // Now proceed with the actual analysis
+            performAnalysis();
+          })
+          .catch(connectError => {
+            console.log('[DEBUG] API connectivity test failed:', connectError);
+            if (connectError.name === 'TimeoutError') {
+              showError('Cannot connect to analysis server (timeout). Please check your internet connection.');
+            } else {
+              showError('Cannot connect to analysis server. Please check your internet connection.');
+            }
+          });
         });
         
         async function performAnalysis() {
@@ -506,9 +550,9 @@ document.addEventListener('DOMContentLoaded', () => {
           // Call the API with enhanced security and authentication
           const controller = new AbortController();
           const timeoutId = setTimeout(() => {
-            console.log('[DEBUG] AbortController timeout triggered after 60 seconds');
+            console.log('[DEBUG] AbortController timeout triggered after 120 seconds');
             controller.abort();
-          }, 60000); // Increased from 30000 to 60000 (60 seconds)
+          }, 120000); // Increased from 60000 to 120000 (120 seconds for LLM processing)
           
           console.log('[DEBUG] Starting fetch request to:', config.getApiUrl());
           
@@ -583,9 +627,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // More specific error handling
             if (error.name === 'AbortError') {
-              showError('Request was cancelled (this may happen if the server takes too long to respond)');
+              showError('Analysis timed out. The server is taking longer than expected. This might be due to high server load or a complex article. Please try again in a few moments.');
             } else if (error.message.includes('Failed to fetch')) {
-              showError('Cannot connect to the analysis server. Please check your internet connection.');
+              showError('Cannot connect to the analysis server. Please check your internet connection and try again.');
+            } else if (error.message.includes('NetworkError')) {
+              showError('Network error occurred. Please check your internet connection and try again.');
             } else {
               showError(error.message);
             }

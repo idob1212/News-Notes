@@ -126,6 +126,8 @@ def reset_monthly_usage_if_needed(user_doc: dict) -> dict:
         
         user_doc["monthly_usage"] = 0
         user_doc["usage_reset_date"] = next_reset
+        # Also reset analyzed articles list on monthly reset
+        user_doc["analyzed_articles"] = []
     
     return user_doc
 
@@ -141,8 +143,18 @@ def can_user_analyze_article(user_doc: dict) -> bool:
     return user_doc.get("monthly_usage", 0) < 5
 
 
-def increment_user_usage(users_collection: Collection, user_email: str) -> bool:
-    """Increment user's monthly usage counter."""
+def has_user_analyzed_article(user_doc: dict, article_url: str) -> bool:
+    """Check if user has already analyzed this specific article."""
+    analyzed_articles = user_doc.get("analyzed_articles", [])
+    return article_url in analyzed_articles
+
+
+def increment_user_usage(users_collection: Collection, user_email: str, article_url: str) -> bool:
+    """
+    Increment user's monthly usage counter only if they haven't analyzed this article before.
+    For free users, only count unique articles toward their limit.
+    Premium users don't have usage limits but we still track their analyzed articles.
+    """
     try:
         # Get current user document
         user_doc = users_collection.find_one({"email": user_email})
@@ -152,18 +164,31 @@ def increment_user_usage(users_collection: Collection, user_email: str) -> bool:
         # Reset usage if needed
         user_doc = reset_monthly_usage_if_needed(user_doc)
         
-        # Increment usage
-        new_usage = user_doc.get("monthly_usage", 0) + 1
+        # Get current analyzed articles list
+        analyzed_articles = user_doc.get("analyzed_articles", [])
+        
+        # Check if this is a new article for the user
+        is_new_article = article_url not in analyzed_articles
+        
+        # Prepare update data
+        update_data = {
+            "usage_reset_date": user_doc["usage_reset_date"]
+        }
+        
+        # Always add the article to the analyzed list if not already there
+        if is_new_article:
+            analyzed_articles.append(article_url)
+            update_data["analyzed_articles"] = analyzed_articles
+            
+            # Only increment usage counter for free users and only for new articles
+            if user_doc.get("account_type") == AccountType.FREE:
+                new_usage = user_doc.get("monthly_usage", 0) + 1
+                update_data["monthly_usage"] = new_usage
         
         # Update in database
         result = users_collection.update_one(
             {"email": user_email},
-            {
-                "$set": {
-                    "monthly_usage": new_usage,
-                    "usage_reset_date": user_doc["usage_reset_date"]
-                }
-            }
+            {"$set": update_data}
         )
         
         return result.modified_count > 0

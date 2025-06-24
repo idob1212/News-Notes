@@ -83,6 +83,7 @@ class UserDocument(BaseModel):
     # Usage tracking for free accounts
     monthly_usage: int = Field(default=0, description="Articles analyzed this month")
     usage_reset_date: datetime = Field(default_factory=datetime.utcnow, description="When usage counter resets")
+    analyzed_articles: List[str] = Field(default_factory=list, description="URLs of articles this user has analyzed")
     # Paddle integration
     paddle_customer_id: Optional[str] = Field(default=None, description="Paddle customer ID")
     paddle_subscription_id: Optional[str] = Field(default=None, description="Paddle subscription ID")
