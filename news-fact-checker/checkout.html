@@ -4,7 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>News Notes - Premium Checkout</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #4A90E2;
+            --primary-hover-color: #357ABD;
+            --secondary-color: #F5F7FA;
+            --text-color: #333;
+            --text-secondary-color: #555;
+            --border-color: #DDE2E8;
+            --success-color: #5CB85C;
+            --border-radius: 8px;
+            --box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,135 +25,205 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--secondary-color);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            color: var(--text-color);
         }
 
         .checkout-container {
             background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            max-width: 500px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 32px 40px; /* Increased padding */
+            max-width: 480px; /* Slightly adjusted max-width */
             width: 100%;
             text-align: center;
         }
 
-        .logo {
-            font-size: 2.5rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 10px;
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+
+        .logo-icon {
+            font-size: 2rem; /* Adjust if using an actual image/SVG */
+            margin-right: 10px;
+            color: var(--primary-color);
+        }
+
+        .logo-text {
+            font-size: 1.75rem; /* Adjusted size */
+            font-weight: 700;
+            color: var(--primary-color);
         }
 
         .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1rem;
+            color: var(--text-secondary-color);
+            margin-bottom: 24px; /* Adjusted spacing */
+            font-size: 1rem;
+            font-weight: 500;
         }
 
         .plan-card {
-            border: 2px solid #667eea;
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
-            background: #f8f9ff;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 24px; /* Adjusted padding */
+            margin-bottom: 24px;
+            background: #F9FAFB; /* Lighter background for the card */
         }
 
         .plan-name {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 10px;
+            font-size: 1.25rem; /* Adjusted size */
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 8px;
         }
 
         .plan-price {
-            font-size: 3rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 10px;
+            font-size: 2.5rem; /* Adjusted size */
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 4px;
         }
 
         .plan-period {
-            color: #666;
-            margin-bottom: 20px;
+            color: var(--text-secondary-color);
+            margin-bottom: 16px;
+            font-size: 0.9rem;
         }
 
         .features {
             list-style: none;
             text-align: left;
+            margin: 0;
+            padding: 0;
         }
 
         .features li {
-            padding: 8px 0;
-            color: #555;
+            padding: 6px 0; /* Adjusted padding */
+            color: var(--text-secondary-color);
             position: relative;
-            padding-left: 25px;
+            padding-left: 28px; /* Increased padding for icon */
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
         }
 
-        .features li:before {
-            content: "✓";
-            color: #4ade80;
-            font-weight: bold;
+        .features li svg { /* Style for SVG checkmark */
+            width: 18px;
+            height: 18px;
+            color: var(--success-color);
             position: absolute;
             left: 0;
+            top: 50%;
+            transform: translateY(-50%);
         }
 
         .checkout-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 15px 40px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            border-radius: 8px;
+            padding: 14px 32px; /* Adjusted padding */
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: var(--border-radius);
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
             width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .checkout-btn:hover {
-            transform: translateY(-2px);
+            background-color: var(--primary-hover-color);
+            transform: translateY(-1px);
+        }
+
+        .checkout-btn:active {
+            transform: translateY(0);
         }
 
         .security-info {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            color: #666;
-            font-size: 0.9rem;
+            margin-top: 24px; /* Adjusted spacing */
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary-color);
+            font-size: 0.85rem;
+            line-height: 1.5;
         }
 
-        .loading {
-            display: none;
-            margin-top: 20px;
+        .security-info svg { /* Style for lock icon */
+            width: 14px;
+            height: 14px;
+            vertical-align: middle;
+            margin-right: 4px;
+            color: var(--text-secondary-color);
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            flex-direction: column;
         }
 
         .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid var(--primary-color); /* Blue */
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
+            width: 40px;
+            height: 40px;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        .loading-text {
+            font-size: 1rem;
+            color: var(--text-color);
+            font-weight: 500;
         }
 
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .error-message {
+            background-color: #FFF2F2;
+            color: #CC0000;
+            border: 1px solid #FFBDBD;
+            border-radius: var(--border-radius);
+            padding: 12px;
+            margin-top: 16px;
+            font-size: 0.9rem;
+            text-align: left;
+            display: none; /* Hidden by default */
+        }
     </style>
 </head>
 <body>
     <div class="checkout-container">
-        <div class="logo">📰 News Notes</div>
-        <div class="subtitle">Upgrade to Premium</div>
+        <div class="logo-container">
+            <span class="logo-icon">📰</span> <!-- Placeholder, replace with actual SVG or image if available -->
+            <div class="logo-text">News Notes</div>
+        </div>
+        <div class="subtitle">Upgrade to Unlock Premium Features</div>
         
         <div class="plan-card">
             <div class="plan-name">Premium Plan</div>
@@ -148,98 +231,210 @@
             <div class="plan-period">per month</div>
             
             <ul class="features">
-                <li>Unlimited fact-checking</li>
-                <li>Advanced AI analysis</li>
-                <li>Priority support</li>
-                <li>Export reports</li>
-                <li>Custom settings</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Unlimited fact-checking</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Advanced AI analysis</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Priority support</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Export reports</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Custom settings</li>
             </ul>
         </div>
 
-        <button class="checkout-btn" onclick="startCheckout()">
-            Continue to Payment
+        <button class="checkout-btn" id="checkoutBtn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:20px; height:20px;">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            Proceed to Secure Payment
         </button>
 
-        <div class="loading">
-            <div class="spinner"></div>
-            <p>Redirecting to secure payment...</p>
-        </div>
+        <div id="errorMessage" class="error-message"></div>
 
         <div class="security-info">
-            🔒 Secure payment powered by Paddle<br>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style="width:16px; height:16px;">
+                <path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clip-rule="evenodd" />
+            </svg>
+            Secure payment powered by Paddle<br>
             Cancel anytime • 30-day money-back guarantee
         </div>
     </div>
 
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p class="loading-text">Processing your request...</p>
+    </div>
+
     <script>
-        function startCheckout() {
-            // Show loading state
-            document.querySelector('.checkout-btn').style.display = 'none';
-            document.querySelector('.loading').style.display = 'block';
-            
-            // Get transaction ID from URL if present (from Paddle redirect)
-            const urlParams = new URLSearchParams(window.location.search);
-            const transactionId = urlParams.get('_ptxn');
-            
-            if (transactionId) {
-                // This is a Paddle redirect, initialize Paddle checkout
-                if (window.Paddle) {
-                    Paddle.Checkout.open({
-                        transactionId: transactionId
-                    });
-                } else {
-                    // Fallback: redirect to your backend for checkout creation
-                    window.location.href = '/api/billing/subscribe';
+        const checkoutBtn = document.getElementById('checkoutBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const errorMessageEl = document.getElementById('errorMessage');
+        let paddleInitialized = false;
+        let paddleVendorId = 233256; // Default, will be overridden by switch-env.js
+        let paddleEnvironment = 'production'; // Default
+
+        function showLoading() {
+            loadingOverlay.style.display = 'flex';
+            checkoutBtn.disabled = true;
+        }
+
+        function hideLoading() {
+            loadingOverlay.style.display = 'none';
+            checkoutBtn.disabled = false;
+        }
+
+        function showError(message) {
+            errorMessageEl.textContent = message;
+            errorMessageEl.style.display = 'block';
+            hideLoading();
+        }
+
+        async function initializePaddle() {
+            if (!window.Paddle) {
+                console.error('Paddle.js not loaded.');
+                showError('Payment system is currently unavailable. Please try again later.');
+                return false;
+            }
+            try {
+                // Configuration will be set by switch-env.js or use defaults
+                if (window.NewsNotesConfigGlobal && window.NewsNotesConfigGlobal.PADDLE_VENDOR_ID) {
+                    paddleVendorId = window.NewsNotesConfigGlobal.PADDLE_VENDOR_ID;
+                    paddleEnvironment = window.NewsNotesConfigGlobal.PADDLE_ENVIRONMENT || 'production';
                 }
-            } else {
-                // No transaction ID, redirect to your backend to create checkout
-                fetch('/billing/subscribe', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('auth_token')
-                    },
-                    body: JSON.stringify({
-                        success_url: window.location.origin + '/success.html',
-                        cancel_url: window.location.origin + '/checkout.html'
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.checkout_url) {
-                        window.location.href = data.checkout_url;
-                    } else {
-                        alert('Error creating checkout. Please try again.');
-                        location.reload();
+
+                await Paddle.Setup({
+                    token: window.NewsNotesConfigGlobal?.PADDLE_CLIENT_TOKEN, // Pass client token if available (for Paddle Billing)
+                    vendor: paddleVendorId, // For Paddle Classic
+                    environment: paddleEnvironment, // 'sandbox' or 'production'
+                    eventCallback: function(data) { // Optional: handle Paddle events
+                        console.log('Paddle event:', data);
+                        if (data.event === 'checkout.error') {
+                            showError(data.data?.error?.detail || 'An error occurred with the payment gateway.');
+                            hideLoading();
+                        }
+                        if (data.event === 'checkout.closed') {
+                            hideLoading(); // Hide loading if user closes popup
+                        }
                     }
-                })
-                .catch(error => {
-                    console.error('Checkout error:', error);
-                    alert('Error creating checkout. Please try again.');
-                    location.reload();
                 });
+                paddleInitialized = true;
+                return true;
+            } catch (error) {
+                console.error('Paddle Setup Error:', error);
+                showError('Failed to initialize payment system. Please refresh and try again.');
+                paddleInitialized = false;
+                return false;
             }
         }
 
-        // Auto-start checkout if transaction ID is present
-        window.addEventListener('load', function() {
+        async function startCheckout() {
+            showLoading();
+            errorMessageEl.style.display = 'none'; // Clear previous errors
+
+            if (!paddleInitialized) {
+                const paddleReady = await initializePaddle();
+                if (!paddleReady) {
+                    // Error is shown by initializePaddle
+                    return;
+                }
+            }
+            
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('_ptxn')) {
+            const transactionId = urlParams.get('_ptxn'); // For Paddle Classic redirect
+            const paddleTransactionId = urlParams.get('transaction_id'); // For Paddle Billing redirect
+            
+            if (transactionId && window.Paddle.Checkout) { // Paddle Classic
+                console.log('Paddle Classic transaction ID found:', transactionId);
+                Paddle.Checkout.open({ transactionId: transactionId });
+                // Loading will be hidden by eventCallback or if user closes
+            } else if (paddleTransactionId && window.Paddle.Checkout) { // Paddle Billing
+                 console.log('Paddle Billing transaction ID found:', paddleTransactionId);
+                 Paddle.Checkout.open({
+                    settings: { theme: "light" }, // Or "dark"
+                    items: [{ priceId: window.NewsNotesConfigGlobal.PADDLE_PRICE_ID, quantity: 1 }]
+                    // Price ID should be configured
+                 });
+            } else {
+                // No transaction ID, create a new checkout session
+                const authToken = localStorage.getItem('authToken'); // Use authToken from account.js
+                if (!authToken) {
+                    showError('You must be logged in to subscribe. Please sign in on the extension account page.');
+                    // Consider redirecting to account page or showing login prompt
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/billing/subscribe', { // Ensure this endpoint matches your backend
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
+                        },
+                        body: JSON.stringify({
+                            // For Paddle Classic, success_url and cancel_url are often handled by Paddle's UI.
+                            // For Paddle Billing, these might be configured in Paddle or passed here if API supports.
+                            // For this example, we'll assume the backend handles redirection or returns a Paddle checkout URL.
+                            success_url: window.location.origin + '/success.html?source=checkout', // Added source for clarity
+                            cancel_url: window.location.href // Return to current checkout page
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: 'Failed to create checkout session.' }));
+                        throw new Error(errorData.detail || `HTTP error ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (data.checkout_url) { // If backend returns a URL to redirect to (e.g., Paddle hosted checkout)
+                        window.location.href = data.checkout_url;
+                    } else if (data.paddle_transaction_id && window.Paddle.Checkout) { // If backend returns a transaction_id for Paddle Billing JS SDK
+                        Paddle.Checkout.open({
+                           transactionId: data.paddle_transaction_id
+                        });
+                        // Loading hidden by event or user close
+                    } else if (window.Paddle.Checkout && window.NewsNotesConfigGlobal?.PADDLE_PRICE_ID) { // Fallback to open generic checkout if price ID is known
+                        Paddle.Checkout.open({
+                             items: [{ priceId: window.NewsNotesConfigGlobal.PADDLE_PRICE_ID, quantity: 1 }]
+                        });
+                    }
+                    else {
+                        showError('Could not initiate checkout. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Checkout creation error:', error);
+                    showError(error.message || 'An unexpected error occurred. Please try again.');
+                }
+            }
+        }
+
+        checkoutBtn.addEventListener('click', startCheckout);
+
+        // Initialize Paddle on load to make checkout faster on first click
+        window.addEventListener('load', async () => {
+            // Load config from switch-env.js first
+            if (typeof loadGlobalConfig === 'function') {
+                await loadGlobalConfig(); // Assuming switch-env.js exposes this
+            }
+            const paddleReady = await initializePaddle();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            // If redirected back from Paddle with a transaction_id, automatically open checkout
+            if (paddleReady && (urlParams.has('_ptxn') || urlParams.has('transaction_id'))) {
                 startCheckout();
+            }
+
+            // Check for error query parameters (e.g., if redirected from Paddle with an error)
+            const errorParam = urlParams.get('error');
+            if (errorParam) {
+                showError(decodeURIComponent(errorParam));
             }
         });
     </script>
 
-    <!-- Paddle.js for checkout functionality -->
+    <!-- Load Paddle.js - Ensure this is the correct SDK version for your Paddle setup (Classic vs Billing) -->
+    <!-- For Paddle Billing (Recommended) -->
     <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
-    <script>
-        // Initialize Paddle (this will be set up after you configure Paddle)
-        if (window.Paddle) {
-            Paddle.Setup({
-                environment: 'production', // Change to 'sandbox' for testing
-                vendor: 233256 // Your Paddle vendor ID
-            });
-        }
-    </script>
+    <!-- For Paddle Classic (Legacy) - <script src="https://cdn.paddle.com/paddle/paddle.js"></script> -->
+
+    <!-- switch-env.js should be loaded before this script if it sets NewsNotesConfigGlobal -->
+    <script src="news-fact-checker/extension/switch-env.js"></script>
 </body>
-</html> 
+</html>

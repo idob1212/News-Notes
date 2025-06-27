@@ -4,7 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment Successful - News Notes</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #4A90E2; /* From checkout */
+            --success-color: #5CB85C; /* Green for success */
+            --success-background: #F0FDF4;
+            --success-border: #BBF7D0;
+            --text-color: #333;
+            --text-secondary-color: #555;
+            --secondary-color: #F5F7FA; /* Page background */
+            --border-radius: 8px;
+            --box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,177 +25,277 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--secondary-color);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
+            color: var(--text-color);
         }
 
         .success-container {
             background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            max-width: 500px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 32px 40px;
+            max-width: 520px; /* Slightly wider for more content */
             width: 100%;
             text-align: center;
         }
 
-        .success-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
+        .success-icon-wrapper {
+            width: 72px;
+            height: 72px;
+            background-color: var(--success-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px auto;
+            color: white;
+        }
+
+        .success-icon-wrapper svg {
+            width: 40px;
+            height: 40px;
         }
 
         .success-title {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 10px;
+            font-size: 1.75rem; /* Adjusted */
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 8px;
         }
 
         .success-subtitle {
-            color: #666;
-            font-size: 1.1rem;
-            margin-bottom: 30px;
+            color: var(--text-secondary-color);
+            font-size: 1rem; /* Adjusted */
+            margin-bottom: 24px;
+            font-weight: 500;
         }
 
         .premium-features {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 8px;
+            background: var(--success-background);
+            border: 1px solid var(--success-border);
+            border-radius: var(--border-radius);
             padding: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }
 
         .features-title {
-            font-weight: bold;
-            color: #059669;
-            margin-bottom: 15px;
+            font-weight: 600; /* Bolder */
+            color: #065F46; /* Darker green for title */
+            margin-bottom: 16px; /* Increased spacing */
+            font-size: 1.1rem;
         }
 
         .features-list {
             list-style: none;
             text-align: left;
+            padding: 0;
         }
 
         .features-list li {
-            padding: 5px 0;
-            color: #374151;
+            padding: 6px 0;
+            color: var(--text-secondary-color);
             position: relative;
-            padding-left: 25px;
+            padding-left: 28px;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
         }
 
-        .features-list li:before {
-            content: "✓";
-            color: #10b981;
-            font-weight: bold;
+        .features-list li svg { /* For SVG checkmarks */
+            width: 18px;
+            height: 18px;
+            color: var(--success-color);
             position: absolute;
             left: 0;
+            top: 50%;
+            transform: translateY(-50%);
         }
 
         .action-buttons {
             display: flex;
-            gap: 15px;
+            gap: 16px; /* Increased gap */
             justify-content: center;
-            flex-wrap: wrap;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
         }
 
         .btn {
-            padding: 12px 24px;
-            border-radius: 8px;
+            padding: 12px 28px; /* Adjusted padding */
+            border-radius: var(--border-radius);
             text-decoration: none;
             font-weight: 600;
-            transition: transform 0.2s;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
             border: none;
             cursor: pointer;
+            font-size: 0.95rem;
+            display: inline-flex; /* For icon alignment */
+            align-items: center;
+            gap: 8px;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: var(--primary-color);
             color: white;
         }
+        .btn-primary:hover {
+            background-color: var(--primary-hover-color);
+        }
+
 
         .btn-secondary {
-            background: #f3f4f6;
-            color: #374151;
-            border: 1px solid #d1d5db;
+            background: #E5E7EB; /* Light gray */
+            color: var(--text-color);
+            border: 1px solid #D1D5DB; /* Subtle border */
+        }
+        .btn-secondary:hover {
+            background: #D1D5DB; /* Darker gray on hover */
         }
 
         .footer-info {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            color: #6b7280;
-            font-size: 0.9rem;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #E5E7EB; /* Lighter border */
+            color: var(--text-secondary-color);
+            font-size: 0.85rem;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
     <div class="success-container">
-        <div class="success-icon">🎉</div>
+        <div class="success-icon-wrapper">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+        </div>
         <h1 class="success-title">Payment Successful!</h1>
-        <p class="success-subtitle">Welcome to News Notes Premium</p>
+        <p class="success-subtitle">Welcome to News Notes Premium. Your account is now upgraded.</p>
         
         <div class="premium-features">
-            <div class="features-title">Your Premium Features Are Now Active:</div>
+            <div class="features-title">Enjoy Your Premium Benefits:</div>
             <ul class="features-list">
-                <li>Unlimited fact-checking analysis</li>
-                <li>Advanced AI-powered insights</li>
-                <li>Priority customer support</li>
-                <li>Export and save reports</li>
-                <li>Custom analysis settings</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Unlimited fact-checking</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Advanced AI analysis</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Priority support</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Export reports</li>
+                <li><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>Custom settings</li>
             </ul>
         </div>
 
         <div class="action-buttons">
-            <a href="#" class="btn btn-primary" onclick="openExtension()">
-                Start Using Premium
-            </a>
-            <a href="#" class="btn btn-secondary" onclick="closeWindow()">
-                Close Window
-            </a>
+            <button id="openExtensionBtn" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:20px; height:20px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+                Open News Notes
+            </button>
+            <button id="closeWindowBtn" class="btn btn-secondary">
+                Close This Page
+            </button>
         </div>
 
         <div class="footer-info">
-            🔄 Your subscription will renew monthly<br>
-            📧 Receipt sent to your email<br>
-            ❓ Questions? Contact support
+            A receipt has been sent to your email address.<br>
+            Your subscription will renew automatically. You can manage your subscription from your account settings.
         </div>
     </div>
 
     <script>
+        // Try to confirm subscription with backend to ensure account is upgraded.
+        async function confirmSubscriptionWithBackend() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const transactionId = urlParams.get('transaction_id') || urlParams.get('passthrough_transaction_id') || urlParams.get('paddle_order_id');
+            const customerId = urlParams.get('customer_id') || urlParams.get('paddle_user_id');
+            const subscriptionId = urlParams.get('subscription_id') || urlParams.get('paddle_subscription_id');
+            const customerEmail = localStorage.getItem('userEmailForConfirmation'); // Assuming email is stored before redirect to Paddle
+
+            if (!transactionId && !customerEmail) {
+                console.warn('Not enough information to confirm subscription with backend.');
+                return;
+            }
+
+            try {
+                // Determine API base URL (should ideally come from a shared config or env)
+                const apiBaseUrl = window.NewsNotesConfigGlobal ? window.NewsNotesConfigGlobal.getBaseUrl() : 'http://localhost:8000';
+
+                const response = await fetch(`${apiBaseUrl}/billing/confirm-subscription`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        transaction_id: transactionId,
+                        customer_id: customerId,
+                        subscription_id: subscriptionId,
+                        customer_email: customerEmail
+                    })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Subscription confirmed with backend:', data);
+                    if (data.success && data.account_type === 'PREMIUM') {
+                        // Optionally update UI further or set a flag
+                    } else {
+                        console.warn('Backend confirmation issue:', data.message);
+                    }
+                } else {
+                    console.error('Failed to confirm subscription with backend:', response.statusText);
+                }
+            } catch (error) {
+                console.error('Error confirming subscription with backend:', error);
+            }
+        }
+
+
         function openExtension() {
-            // Try to open the browser extension
-            if (window.chrome && chrome.runtime) {
-                // Running inside Chrome extension context
-                chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                    chrome.tabs.update(tabs[0].id, {url: 'chrome-extension://your-extension-id/sidebar.html'});
+            // Attempt to send a message to the extension to open its main interface or account page.
+            if (chrome && chrome.runtime && chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage({ action: "openAccountPage" }, function(response) {
+                    if (chrome.runtime.lastError) {
+                        console.warn("Could not send message to extension. It might not be installed or enabled.", chrome.runtime.lastError.message);
+                        alert('Please open your News Notes browser extension to see your upgraded account.');
+                    } else if (response && response.status === "success") {
+                        console.log("Extension notified to open account page.");
+                         // Optionally close this success page now, or give user a button
+                    } else {
+                        alert('Please open your News Notes browser extension to see your upgraded account.');
+                    }
                 });
             } else {
-                // Fallback: provide instructions
-                alert('Please open your News Notes browser extension to start using Premium features!');
-                window.close();
+                alert('Please open your News Notes browser extension to see your upgraded account.');
             }
+            // Optionally, try to close the window after attempting to open the extension.
+            // setTimeout(() => window.close(), 1000); // Give a moment for the message to send
         }
 
         function closeWindow() {
             window.close();
+            // If window.close() is blocked, provide instructions.
+            if (!window.closed) {
+                document.body.innerHTML = '<div style="text-align:center; padding:50px; font-size:1.2em;">You can now close this tab and return to the News Notes extension.</div>';
+            }
         }
 
-        // Auto-close after 10 seconds if user doesn't interact
-        setTimeout(() => {
-            const shouldClose = confirm('Payment successful! Close this window and return to News Notes?');
-            if (shouldClose) {
-                window.close();
-            }
-        }, 10000);
+        document.getElementById('openExtensionBtn').addEventListener('click', openExtension);
+        document.getElementById('closeWindowBtn').addEventListener('click', closeWindow);
+
+        window.addEventListener('load', () => {
+            confirmSubscriptionWithBackend();
+            // Remove the auto-close timeout with confirm, as it can be annoying.
+            // User can explicitly close or open extension.
+        });
     </script>
+     <script src="news-fact-checker/extension/switch-env.js"></script>
 </body>
-</html> 
+</html>

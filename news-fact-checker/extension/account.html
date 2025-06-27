@@ -3,60 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>News Notes - Account</title>
+    <title>News Notes - Account Management</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="account.css">
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
-        <div class="header">
+        <header class="header">
             <h1>News Notes</h1>
-            <p class="subtitle">Fact-checking extension</p>
+            <p class="subtitle">Manage your account and subscription</p>
+        </header>
+
+        <!-- Status Messages Container -->
+        <div id="statusMessageContainer">
+             <!-- Status message will be prepended here by JS -->
         </div>
 
         <!-- Authentication Section -->
-        <div id="authSection" class="section">
+        <section id="authSection" class="section" style="display: none;">
             <div id="loginForm" class="auth-form">
                 <h2>Sign In</h2>
                 <form id="loginFormElement">
                     <div class="form-group">
-                        <label for="loginEmail">Email:</label>
-                        <input type="email" id="loginEmail" required>
+                        <label for="loginEmail">Email Address</label>
+                        <input type="email" id="loginEmail" required autocomplete="email">
                     </div>
                     <div class="form-group">
-                        <label for="loginPassword">Password:</label>
-                        <input type="password" id="loginPassword" required>
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" required autocomplete="current-password">
                     </div>
                     <button type="submit" class="btn btn-primary">Sign In</button>
                 </form>
                 <p class="form-toggle">
-                    Don't have an account? <a href="#" id="showRegisterLink">Sign up</a>
+                    New to News Notes? <a href="#" id="showRegisterLink">Create an account</a>
                 </p>
-                <div class="oauth-buttons">
-                    <button id="googleSignInBtn" class="btn btn-oauth google">
-                        <img src="images/google-logo.png" alt="Google logo"> Sign in with Google
-                    </button>
-                    <button id="appleSignInBtn" class="btn btn-oauth apple">
-                        <img src="images/apple-logo.png" alt="Apple logo"> Sign in with Apple
-                    </button>
-                </div>
             </div>
 
             <div id="registerForm" class="auth-form" style="display: none;">
                 <h2>Create Account</h2>
                 <form id="registerFormElement">
                     <div class="form-group">
-                        <label for="registerName">Full Name:</label>
-                        <input type="text" id="registerName">
+                        <label for="registerName">Full Name</label>
+                        <input type="text" id="registerName" autocomplete="name">
                     </div>
                     <div class="form-group">
-                        <label for="registerEmail">Email:</label>
-                        <input type="email" id="registerEmail" required>
+                        <label for="registerEmail">Email Address</label>
+                        <input type="email" id="registerEmail" required autocomplete="email">
                     </div>
                     <div class="form-group">
-                        <label for="registerPassword">Password:</label>
-                        <input type="password" id="registerPassword" required minlength="8">
-                        <small>Minimum 8 characters</small>
+                        <label for="registerPassword">Password</label>
+                        <input type="password" id="registerPassword" required minlength="8" autocomplete="new-password">
+                        <small>Minimum 8 characters. Include a mix of letters and numbers.</small>
                     </div>
                     <button type="submit" class="btn btn-primary">Create Account</button>
                 </form>
@@ -64,75 +61,84 @@
                     Already have an account? <a href="#" id="showLoginLink">Sign in</a>
                 </p>
             </div>
-        </div>
+
+            <div class="oauth-buttons">
+                <p class="oauth-buttons-title">Or sign in with</p>
+                <button id="googleSignInBtn" class="btn btn-oauth google">
+                    <img src="images/google-logo.png" alt="Google logo"> Sign in with Google
+                </button>
+                <button id="appleSignInBtn" class="btn btn-oauth apple">
+                    <img src="images/apple-logo.png" alt="Apple logo"> Sign in with Apple
+                </button>
+            </div>
+        </section>
 
         <!-- Account Dashboard -->
-        <div id="dashboardSection" class="section" style="display: none;">
+        <section id="dashboardSection" class="section" style="display: none;">
             <div class="user-info">
                 <h2>Welcome back!</h2>
-                <p id="userEmail"></p>
+                <p id="userEmailDisplay"></p> <!-- Changed ID for clarity -->
                 <button id="logoutBtn" class="btn btn-secondary">Sign Out</button>
             </div>
 
-            <!-- Usage Information -->
-            <div class="usage-card">
-                <h3>Your Usage</h3>
+            <div class="card usage-card">
+                <h3>Current Usage</h3>
                 <div class="usage-stats">
                     <div class="stat">
-                        <span class="stat-label">Plan:</span>
-                        <span id="accountType" class="stat-value"></span>
+                        <span class="stat-label">Current Plan:</span>
+                        <span id="accountType" class="stat-value"><span class="plan-badge free">Free</span></span>
                     </div>
                     <div class="stat">
-                        <span class="stat-label">Articles this month:</span>
-                        <span id="monthlyUsage" class="stat-value"></span>
+                        <span class="stat-label">Analyses This Month:</span>
+                        <span id="monthlyUsage" class="stat-value">0</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-label">Limit:</span>
-                        <span id="usageLimit" class="stat-value"></span>
+                        <span class="stat-label">Monthly Limit:</span>
+                        <span id="usageLimit" class="stat-value">5</span>
                     </div>
-                    <div class="stat">
-                        <span class="stat-label">Resets:</span>
-                        <span id="resetDate" class="stat-value"></span>
+                </div>
+                <div class="usage-progress-container" id="usageProgressContainer" style="display: none;">
+                    <div class="usage-progress">
+                        <div class="usage-progress-bar" id="usageProgressBar" style="width: 0%;"></div>
                     </div>
+                    <p class="usage-text-details" id="usageTextDetails">Next reset: <span id="resetDate">N/A</span></p>
                 </div>
             </div>
 
-            <!-- Billing Section -->
-            <div class="billing-card">
-                <h3>Billing</h3>
-                <div id="freeAccountBilling" class="billing-info">
-                    <p>You're currently on the <strong>Free Plan</strong></p>
+            <div class="card billing-card">
+                <h3>Subscription</h3>
+                <div id="freeAccountBilling" class="billing-info" style="display: none;">
+                    <p>You are currently on the <strong>Free Plan</strong>.</p>
+                    <p>Upgrade to Premium for unlimited analyses and more features!</p>
                     <ul>
-                        <li>5 articles per month</li>
-                        <li>Basic fact-checking</li>
+                        <li>Unlimited fact-checking analyses</li>
+                        <li>Advanced AI-powered insights</li>
+                        <li>Priority customer support</li>
                     </ul>
                     <button id="upgradeBtn" class="btn btn-primary">Upgrade to Premium - $3.99/month</button>
                 </div>
 
                 <div id="premiumAccountBilling" class="billing-info" style="display: none;">
-                    <p>You're on the <strong>Premium Plan</strong></p>
+                    <p>You are on the <strong>Premium Plan</strong>. Thank you for your support!</p>
                     <ul>
-                        <li>Unlimited articles</li>
-                        <li>Priority fact-checking</li>
-                        <li>Advanced analytics</li>
+                        <li>Unlimited fact-checking analyses</li>
+                        <li>Advanced AI-powered insights</li>
+                        <li>Priority customer support</li>
                     </ul>
+                    <p>Your subscription renews automatically. You can manage your subscription through Paddle.</p>
                     <button id="cancelBtn" class="btn btn-danger">Cancel Subscription</button>
                 </div>
             </div>
-        </div>
-
-        <!-- Status Messages -->
-        <div id="statusMessage" class="status-message"></div>
-
-        <!-- Loading Indicator -->
-        <div id="loadingIndicator" class="loading" style="display: none;">
-            <div class="spinner"></div>
-            <p>Processing...</p>
-        </div>
+        </section>
     </div>
 
-    <!-- Scripts -->
+    <!-- Full-screen Loading Indicator -->
+    <div id="loadingIndicator" style="display: none;">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
+
     <script src="switch-env.js"></script>
     <script src="account.js"></script>
 </body>
-</html> 
+</html>

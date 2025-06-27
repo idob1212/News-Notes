@@ -1,52 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>TruthPilot Sidebar</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>News Notes Sidebar</title>
   <link rel="stylesheet" href="sidebar.css">
+  <!-- Consider adding a link to an icon library if you plan to use SVG icons extensively -->
 </head>
 <body>
   <div class="sidebar-container">
-    <div class="header">
-      <img src="images/icon48.png" alt="Logo">
-      <h1>TruthPilot</h1>
-      <button class="close-btn" id="closeBtn">&times;</button>
-    </div>
+    <header class="header">
+      <img src="images/icon48.png" alt="News Notes Logo">
+      <h1>News Notes</h1>
+      <button class="close-btn" id="closeBtn" aria-label="Close Sidebar">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </header>
     
-    <div class="content">
+    <main class="content">
       <!-- Account Status Section -->
-      <div id="accountStatus" class="account-status" style="display: none;">
+      <section id="accountStatus" class="account-status" style="display: none;" aria-labelledby="account-status-heading">
         <div class="account-info">
-          <span id="accountPlan" class="plan-badge">Free</span>
+          <span id="accountPlan" class="plan-badge free">Free</span> <!-- Default to free, JS will update -->
           <span id="accountUsage" class="usage-text">0/5 this month</span>
         </div>
         <button id="manageAccountBtn" class="manage-account-btn">Manage Account</button>
-      </div>
+      </section>
       
-      <div class="info">
-        Analyze this article for potential misinformation or bias.
-      </div>
+      <section class="info-box" aria-label="Information about the tool">
+        <p>Analyze this article for potential misinformation or bias.</p>
+      </section>
       
-      <div class="disclaimer">
-        <strong>Disclaimer:</strong> This is an automated fact-checking tool. Results should be independently verified. <a href="privacy_policy.html" target="_blank" style="color: #856404; text-decoration: underline;">Privacy Policy</a>
-      </div>
+      <section class="disclaimer" aria-label="Disclaimer">
+        <p><strong>Disclaimer:</strong> This is an automated fact-checking tool. Results should be independently verified. <a href="privacy_policy.html" target="_blank">Privacy Policy</a></p>
+      </section>
       
       <button id="analyzeBtn">Analyze This Article</button>
       
-      <div id="status" class="status" style="display: none;">
+      <div id="status" class="status" style="display: none;" aria-live="polite">
+        <!-- JS will populate this. Example: <span class="spinner"></span> Analyzing... -->
         Loading...
       </div>
       
-      <div id="results" class="results">
-        <div id="resultCount" class="result-count" style="display: none;">
-          Found 0 potential issues
-        </div>
-        <div id="issueList">
+      <section id="results" class="results" aria-labelledby="results-heading">
+        <h2 id="results-heading" class="result-count" style="display: none;">Found 0 potential issues</h2>
+        <div id="issueList" class="issue-list">
           <!-- Issues will be added here dynamically -->
+          <!-- Example of empty state (to be shown/hidden by JS) -->
+          <div id="emptyResultsState" class="empty-results" style="display: none;">
+            <div class="empty-results-icon" aria-hidden="true">ℹ️</div> <!-- Placeholder, replace with SVG or better icon -->
+            <h3 class="empty-results-title">No Issues Found</h3>
+            <p class="empty-results-message">Our analysis didn't find any potential issues in this article, or the analysis is not yet complete.</p>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   </div>
   
   <script src="sidebar.js"></script>
 </body>
-</html> 
+</html>
