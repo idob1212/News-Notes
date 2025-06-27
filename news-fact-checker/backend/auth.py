@@ -105,7 +105,9 @@ async def get_current_user(
         full_name=user_doc.get("full_name"),
         account_type=AccountType(user_doc.get("account_type", AccountType.FREE)),
         created_at=user_doc["created_at"],
-        is_active=user_doc.get("is_active", True)
+        is_active=user_doc.get("is_active", True),
+        google_id=user_doc.get("google_id"),
+        apple_id=user_doc.get("apple_id")
     )
     
     return user

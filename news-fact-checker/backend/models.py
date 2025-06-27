@@ -70,6 +70,8 @@ class User(BaseModel):
     account_type: AccountType = Field(default=AccountType.FREE, description="Account type")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Account creation timestamp")
     is_active: bool = Field(default=True, description="Whether account is active")
+    google_id: Optional[str] = Field(default=None, description="Google OAuth ID")
+    apple_id: Optional[str] = Field(default=None, description="Apple OAuth ID")
 
 
 class UserDocument(BaseModel):
@@ -87,6 +89,9 @@ class UserDocument(BaseModel):
     # Paddle integration
     paddle_customer_id: Optional[str] = Field(default=None, description="Paddle customer ID")
     paddle_subscription_id: Optional[str] = Field(default=None, description="Paddle subscription ID")
+    # OAuth IDs
+    google_id: Optional[str] = Field(default=None, description="Google OAuth ID")
+    apple_id: Optional[str] = Field(default=None, description="Apple OAuth ID")
 
 
 class UsageInfo(BaseModel):
@@ -136,4 +141,14 @@ class SubscriptionConfirmationResponse(BaseModel):
     """Model for subscription confirmation response."""
     success: bool = Field(description="Whether confirmation was successful")
     message: str = Field(description="Confirmation message")
-    account_type: AccountType = Field(description="Updated account type") 
+    account_type: AccountType = Field(description="Updated account type")
+
+
+class GoogleLoginRequest(BaseModel):
+    """Model for Google OAuth login request."""
+    token: str = Field(description="Google ID token")
+
+
+class AppleLoginRequest(BaseModel):
+    """Model for Apple OAuth login request."""
+    token: str = Field(description="Apple ID token")

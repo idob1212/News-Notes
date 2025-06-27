@@ -41,11 +41,25 @@ OPENAI_API_KEY=your_openai_api_key_here
 PERPLEXITY_API_KEY=your_perplexity_api_key_here
 YDC_API_KEY=your_you_api_key_here
 MONGODB_URL=your_mongodb_connection_string_here
+# Added for JWT and OAuth
+JWT_SECRET_KEY=your_super_secret_jwt_key_change_in_production
+GOOGLE_CLIENT_ID=your_google_client_id_here
+APPLE_CLIENT_ID=your_apple_client_id_here
+APPLE_TEAM_ID=your_apple_team_id_here
+APPLE_KEY_ID=your_apple_key_id_here
+APPLE_PRIVATE_KEY_PATH=path/to/your/AuthKey_XXXXXXXXXX.p8
 ```
    - `OPENAI_API_KEY`: Used for OpenAI services (fallback option).
    - `PERPLEXITY_API_KEY`: Used for Perplexity AI services (fallback option).
    - `YDC_API_KEY`: Required for the You.com API integration. The backend uses the official LangChain You.com integration (`langchain_community.llms.you.You`) to interact with the You.com Research API. This provides better stability and follows LangChain best practices.
    - `MONGODB_URL`: Required to connect to your MongoDB instance for caching analysis results.
+   - `JWT_SECRET_KEY`: A secret key for signing JWT tokens. Ensure this is strong and kept private.
+   - `GOOGLE_CLIENT_ID`: Your Google Cloud project's OAuth 2.0 Client ID.
+   - `APPLE_CLIENT_ID`: Your Apple App ID or Services ID.
+   - `APPLE_TEAM_ID`: Your Apple Developer Team ID.
+   - `APPLE_KEY_ID`: The Key ID for the private key generated for Sign in with Apple.
+   - `APPLE_PRIVATE_KEY_PATH`: Filesystem path to your Apple `.p8` private key file.
+     (Alternatively, you can set `APPLE_PRIVATE_KEY` directly in your environment with the key content).
 
    The project uses `langchain` (already listed in `requirements.txt`) to orchestrate interactions with language models.
 

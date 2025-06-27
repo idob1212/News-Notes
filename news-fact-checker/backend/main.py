@@ -15,7 +15,7 @@ from models import (
     UserCreate, UserLogin, User, Token, UsageInfo,
     SubscriptionRequest, SubscriptionResponse, WebhookEvent,
     SubscriptionConfirmation, SubscriptionConfirmationResponse,
-    AccountType
+    AccountType, GoogleLoginRequest, AppleLoginRequest
 )
 from utils import (
     setup_database_connection,
@@ -176,6 +176,111 @@ def process_new_analysis(article: ArticleRequest) -> AnalysisResponse:
     
     return AnalysisResponse(issues=analysis_result.issues)
 
+
+# Helper function for OAuth user creation/login
+async def _handle_oauth_login(email: str, oauth_provider: str, oauth_id: str, full_name: Optional[str] = None) -> Token:
+    """Handles user creation or login for OAuth providers."""
+    user_doc = users_collection.find_one({"email": email})
+
+    if user_doc:
+        # User exists, log them in
+        if not user_doc.get("is_active", True):
+            raise HTTPException(status_code=401, detail="Account is disabled")
+
+        # Update OAuth ID if not already set (e.g., existing user linking OAuth)
+        if oauth_provider == "google" and not user_doc.get("google_id"):
+            users_collection.update_one({"email": email}, {"$set": {"google_id": oauth_id}})
+        elif oauth_provider == "apple" and not user_doc.get("apple_id"):
+            users_collection.update_one({"email": email}, {"$set": {"apple_id": oauth_id}})
+
+    else:
+        # New user, create account
+        user_data = {
+            "email": email,
+            "full_name": full_name,
+            "hashed_password": None,  # No password for OAuth users initially
+            "account_type": AccountType.FREE,
+            "created_at": datetime.utcnow(),
+            "is_active": True,
+            "monthly_usage": 0,
+            "usage_reset_date": datetime.utcnow().replace(day=1) + timedelta(days=32),
+            "analyzed_articles": [],
+            "paddle_customer_id": None,
+            "paddle_subscription_id": None,
+            f"{oauth_provider}_id": oauth_id
+        }
+        users_collection.insert_one(user_data)
+        app_logger.info(f"New user registered via {oauth_provider}: {email}")
+
+    access_token = create_access_token(data={"sub": email})
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=7 * 24 * 60 * 60  # 7 days in seconds
+    )
+
+@app.post("/auth/google", response_model=Token)
+async def google_login(request: GoogleLoginRequest):
+    """Authenticate user with Google ID token."""
+    try:
+        # Here you would typically verify the token with Google's API
+        # For this example, we'll assume the token is valid and extract dummy data
+        # In a real application, use libraries like google-auth to verify the token
+        # from google.oauth2 import id_token
+        # from google.auth.transport import requests
+        # id_info = id_token.verify_oauth2_token(request.token, requests.Request(), GOOGLE_CLIENT_ID)
+        # email = id_info['email']
+        # google_id = id_info['sub']
+        # full_name = id_info.get('name')
+
+        # Dummy data for example purposes
+        # Replace with actual token verification and data extraction
+        if not request.token.startswith("dummy_google_token_"):
+            raise HTTPException(status_code=401, detail="Invalid Google token")
+
+        parts = request.token.split("_")
+        email = f"{parts[-2]}@example.com" # Simulate email from token
+        google_id = parts[-1] # Simulate google_id from token
+        full_name = "Google User" # Simulate name from token
+
+        app_logger.info(f"Google login attempt for email: {email}")
+        return await _handle_oauth_login(email, "google", google_id, full_name)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Google login failed: {e}")
+        raise HTTPException(status_code=500, detail="Google login failed")
+
+@app.post("/auth/apple", response_model=Token)
+async def apple_login(request: AppleLoginRequest):
+    """Authenticate user with Apple ID token."""
+    try:
+        # Here you would typically verify the token with Apple's API
+        # For this example, we'll assume the token is valid and extract dummy data
+        # In a real application, use libraries like python-jose and requests to verify the token
+        # You'll need Apple's public keys to verify the signature
+
+        # Dummy data for example purposes
+        # Replace with actual token verification and data extraction
+        if not request.token.startswith("dummy_apple_token_"):
+            raise HTTPException(status_code=401, detail="Invalid Apple token")
+
+        parts = request.token.split("_")
+        email = f"{parts[-2]}@example.com" # Simulate email from token
+        apple_id = parts[-1] # Simulate apple_id from token
+        # Apple often doesn't provide full name directly in the token after initial sign-up
+        # You might need to request it separately or handle it during initial registration
+        full_name = "Apple User" # Simulate name from token
+
+        app_logger.info(f"Apple login attempt for email: {email}")
+        return await _handle_oauth_login(email, "apple", apple_id, full_name)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Apple login failed: {e}")
+        raise HTTPException(status_code=500, detail="Apple login failed")
 
 
 @app.get("/")

@@ -63,6 +63,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const logoutBtn = document.getElementById('logoutBtn');
     const upgradeBtn = document.getElementById('upgradeBtn');
     const cancelBtn = document.getElementById('cancelBtn');
+    const googleSignInBtn = document.getElementById('googleSignInBtn');
+    const appleSignInBtn = document.getElementById('appleSignInBtn');
 
     // Utility functions
     function showLoading() {
@@ -202,6 +204,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    async function googleLoginApi(token) {
+        const data = await apiRequest('/auth/google', {
+            method: 'POST',
+            body: JSON.stringify({ token })
+        });
+        await storeToken(data.access_token);
+        return data;
+    }
+
+    async function appleLoginApi(token) {
+        const data = await apiRequest('/auth/apple', {
+            method: 'POST',
+            body: JSON.stringify({ token })
+        });
+        await storeToken(data.access_token);
+        return data;
+    }
+
     // Form handlers
     async function handleLogin(event) {
         event.preventDefault();
@@ -216,6 +236,50 @@ document.addEventListener('DOMContentLoaded', function() {
             await loadDashboard();
         } catch (error) {
             showMessage(error.message, 'error');
+        } finally {
+            hideLoading();
+        }
+    }
+
+    async function handleGoogleSignIn() {
+        showLoading();
+        try {
+            // Simulate Google Sign-In flow
+            // In a real extension, you would use chrome.identity.getAuthToken or a Google Sign-In library
+            // For this example, we'll use a dummy token
+            const dummyGoogleToken = `dummy_google_token_user${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            showMessage('Simulating Google Sign-In...', 'info');
+
+            // Simulate a delay for the OAuth flow
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            await googleLoginApi(dummyGoogleToken);
+            showMessage('Google Sign-In successful!', 'success');
+            await loadDashboard();
+        } catch (error) {
+            showMessage(`Google Sign-In failed: ${error.message}`, 'error');
+        } finally {
+            hideLoading();
+        }
+    }
+
+    async function handleAppleSignIn() {
+        showLoading();
+        try {
+            // Simulate Apple Sign-In flow
+            // In a real extension, you would use Sign in with Apple JS or similar
+            // For this example, we'll use a dummy token
+            const dummyAppleToken = `dummy_apple_token_user${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            showMessage('Simulating Apple Sign-In...', 'info');
+
+            // Simulate a delay for the OAuth flow
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            await appleLoginApi(dummyAppleToken);
+            showMessage('Apple Sign-In successful!', 'success');
+            await loadDashboard();
+        } catch (error) {
+            showMessage(`Apple Sign-In failed: ${error.message}`, 'error');
         } finally {
             hideLoading();
         }
@@ -345,6 +409,8 @@ document.addEventListener('DOMContentLoaded', function() {
     logoutBtn.addEventListener('click', handleLogout);
     upgradeBtn.addEventListener('click', handleUpgrade);
     cancelBtn.addEventListener('click', handleCancel);
+    googleSignInBtn.addEventListener('click', handleGoogleSignIn);
+    appleSignInBtn.addEventListener('click', handleAppleSignIn);
     
     // Add event listeners for form switching
     document.getElementById('showRegisterLink').addEventListener('click', function(e) {
