@@ -286,11 +286,15 @@ def perform_fact_check_analysis(
     output_parser = PydanticOutputParser(pydantic_object=AnalysisOutput)
     chain = prompt | llm | output_parser
     
-    result = chain.invoke({
-        "current_date": datetime.now().strftime("%Y-%m-%d"),
-        "article_title": title,
-        "article_url": url,
-        "article_content": content
-    })
-    
-    return result 
+    try:
+        result = chain.invoke({
+            "current_date": datetime.now().strftime("%Y-%m-%d"),
+            "article_title": title,
+            "article_url": url,
+            "article_content": content
+        })
+        return result
+    except Exception as e:
+        analysis_logger.warning(f"LLM parsing failed, returning empty analysis: {e}")
+        # Return empty analysis if parsing fails
+        return AnalysisOutput(issues=[]) 

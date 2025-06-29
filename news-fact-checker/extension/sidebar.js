@@ -488,7 +488,11 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Update usage display with safe encoding
       const usageLimit = usage.usage_limit === 999999 ? 'Unlimited' : usage.usage_limit;
-      accountUsage.textContent = `${usage.monthly_usage}/${usageLimit} this month`;
+      if (usage.account_type === 'premium') {
+        accountUsage.textContent = 'Unlimited this month';
+      } else {
+        accountUsage.textContent = `${usage.monthly_usage}/${usageLimit} this month`;
+      }
       
       // Update usage styling based on usage level
       accountUsage.className = 'usage-text';
