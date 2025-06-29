@@ -306,7 +306,11 @@ document.addEventListener('DOMContentLoaded', function() {
             accountType.textContent = usage.account_type.toUpperCase();
 
             // Update usage info
-            monthlyUsage.textContent = usage.monthly_usage;
+            if (usage.account_type === 'premium') {
+                monthlyUsage.textContent = 'Unlimited';
+            } else {
+                monthlyUsage.textContent = usage.monthly_usage;
+            }
             usageLimit.textContent = usage.usage_limit === 999999 ? 'Unlimited' : usage.usage_limit;
             resetDate.textContent = new Date(usage.usage_reset_date).toLocaleDateString();
 
