@@ -173,14 +173,106 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // Show loading state
+  // Show loading state with enhanced UX
   function showLoading() {
     analyzeBtn.disabled = true;
-    status.textContent = 'Analyzing article...';
+    analyzeBtn.style.transform = 'scale(0.98)';
+    
+    const loadingMessages = [
+      'Analyzing article...',
+      'Checking facts...',
+      'Verifying sources...',
+      'Processing content...'
+    ];
+    
+    let messageIndex = 0;
+    status.textContent = loadingMessages[messageIndex];
     status.style.display = 'block';
+    
+    // Rotate loading messages for engagement
+    const messageInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % loadingMessages.length;
+      status.textContent = loadingMessages[messageIndex];
+    }, 2000);
+    
+    // Store interval ID for cleanup
+    status.dataset.messageInterval = messageInterval;
   }
   
-  // Show results
+  // Celebration effect for completed analysis
+  function celebrateCompletion() {
+    // Clear loading message interval
+    if (status.dataset.messageInterval) {
+      clearInterval(parseInt(status.dataset.messageInterval));
+      delete status.dataset.messageInterval;
+    }
+    
+    // Add celebratory effect (visual feedback)
+    const celebration = document.createElement('div');
+    celebration.style.position = 'absolute';
+    celebration.style.top = '20px';
+    celebration.style.right = '20px';
+    celebration.style.width = '24px';
+    celebration.style.height = '24px';
+    celebration.style.background = 'radial-gradient(circle, #fbbf24 0%, #f59e0b 100%)';
+    celebration.style.borderRadius = '50%';
+    celebration.style.animation = 'sparkle 0.8s ease-out';
+    celebration.style.pointerEvents = 'none';
+    celebration.style.zIndex = '1000';
+    
+    document.querySelector('.content').appendChild(celebration);
+    
+    setTimeout(() => {
+      if (celebration.parentNode) {
+        celebration.parentNode.removeChild(celebration);
+      }
+    }, 800);
+    
+    // Add satisfying button reset
+    analyzeBtn.style.transform = '';
+    analyzeBtn.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+  }
+  
+  // Enhanced feedback system
+  function showFeedback(element, type, message) {
+    // Create feedback tooltip
+    const feedback = document.createElement('div');
+    feedback.textContent = message;
+    feedback.style.position = 'absolute';
+    feedback.style.top = '-40px';
+    feedback.style.left = '50%';
+    feedback.style.transform = 'translateX(-50%)';
+    feedback.style.background = type === 'success' ? 
+      'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 
+      'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    feedback.style.color = 'white';
+    feedback.style.padding = '8px 12px';
+    feedback.style.borderRadius = '8px';
+    feedback.style.fontSize = '12px';
+    feedback.style.fontWeight = '500';
+    feedback.style.whiteSpace = 'nowrap';
+    feedback.style.zIndex = '1000';
+    feedback.style.opacity = '0';
+    feedback.style.animation = 'feedbackSlide 2s ease-out forwards';
+    feedback.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+    
+    // Ensure parent has relative positioning
+    element.style.position = 'relative';
+    element.appendChild(feedback);
+    
+    // Apply background animation to element
+    element.classList.add(type === 'success' ? 'success-animation' : 'error-animation');
+    
+    // Cleanup
+    setTimeout(() => {
+      if (feedback.parentNode) {
+        feedback.parentNode.removeChild(feedback);
+      }
+      element.classList.remove('success-animation', 'error-animation');
+    }, 2000);
+  }
+  
+  // Show results with enhanced dopamine triggers
   function showResults(issues, appliedHighlightsMap) {
     console.log('[sidebar.js] showResults called with:', {
       issuesCount: issues.length,
@@ -191,13 +283,23 @@ document.addEventListener('DOMContentLoaded', () => {
     status.style.display = 'none';
     resultCount.style.display = 'block';
     
-    // Update result count
-    resultCount.textContent = `Found ${issues.length} potential ${issues.length === 1 ? 'issue' : 'issues'}`;
+    // Add celebration effect for completion
+    celebrateCompletion();
+    
+    // Update result count with dynamic messaging
+    const issueText = issues.length === 0 ? 'No issues found!' : 
+                     issues.length === 1 ? 'Found 1 potential issue' : 
+                     `Found ${issues.length} potential issues`;
+    resultCount.textContent = issueText;
+    
+    // Add success animation
+    resultCount.classList.add('success-animation');
+    setTimeout(() => resultCount.classList.remove('success-animation'), 600);
     
     // Clear previous issues
     issueList.innerHTML = '';
     
-    // Add issues to the list
+    // Add issues to the list with staggered animations
     issues.forEach((issue, index) => { // index here is originalIssueIndex
       console.log(`[sidebar.js] Processing issue ${index}:`, {
         text: issue.text.substring(0, 100) + '...',
@@ -219,6 +321,13 @@ document.addEventListener('DOMContentLoaded', () => {
         issueElement.addEventListener('click', () => {
           const currentHighlightId = issueElement.dataset.highlightId;
           console.log('[sidebar.js] Issue clicked, highlightId:', currentHighlightId);
+          
+          // Add immediate haptic-like feedback
+          issueElement.style.transform = 'scale(0.98)';
+          setTimeout(() => {
+            issueElement.style.transform = '';
+          }, 150);
+          
           // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
           // but good for safety.
           if (currentHighlightId) { 
@@ -227,24 +336,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId }, (response) => {
                   if (chrome.runtime.lastError) {
                     console.error("Error sending scrollToHighlight message:", chrome.runtime.lastError.message);
-                    // Visual feedback that click didn't work
-                    issueElement.style.background = '#ffebee';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    // Enhanced error feedback
+                    showFeedback(issueElement, 'error', 'Could not scroll to text');
                   } else if (!response || !response.success) {
                     console.error("ScrollToHighlight failed:", response?.error || "Unknown error");
-                    // Visual feedback that scrolling failed
-                    issueElement.style.background = '#ffebee';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    // Enhanced error feedback
+                    showFeedback(issueElement, 'error', 'Scrolling failed');
                   } else {
-                    // Visual feedback that click worked
-                    issueElement.style.background = '#e8f5e8';
-                    setTimeout(() => issueElement.style.background = '', 500);
+                    // Enhanced success feedback
+                    showFeedback(issueElement, 'success', 'Scrolled to text!');
                   }
                 });
               } else {
                 console.error("Could not find active tab to send scrollToHighlight message.");
-                issueElement.style.background = '#ffebee';
-                setTimeout(() => issueElement.style.background = '', 500);
+                showFeedback(issueElement, 'error', 'No active tab found');
               }
             });
           }
@@ -293,18 +398,50 @@ document.addEventListener('DOMContentLoaded', () => {
         issueElement.appendChild(sourcesDiv);
       }
       
+      // Add staggered animation entrance
+      issueElement.style.opacity = '0';
+      issueElement.style.transform = 'translateY(20px)';
+      issueElement.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
+      
       issueList.appendChild(issueElement);
+      
+      // Trigger staggered animation
+      setTimeout(() => {
+        issueElement.style.opacity = '1';
+        issueElement.style.transform = 'translateY(0)';
+      }, index * 150); // Stagger by 150ms per issue
     });
     
-    // Re-enable the button
-    analyzeBtn.disabled = false;
+    // Re-enable the button with enhanced feedback
+    setTimeout(() => {
+      analyzeBtn.disabled = false;
+      analyzeBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+      analyzeBtn.textContent = 'Analysis Complete!';
+      
+      // Reset button after a moment
+      setTimeout(() => {
+        analyzeBtn.style.background = '';
+        analyzeBtn.textContent = 'Analyze This Article';
+      }, 2000);
+    }, issues.length * 150 + 300); // Wait for all animations to complete
   }
   
   // Show error message
   function showError(message) {
+    console.log('[DEBUG] Showing error:', message);
     status.innerHTML = `Error: ${message}`; // Changed from textContent to innerHTML to support links
     status.style.display = 'block';
     analyzeBtn.disabled = false;
+    
+    // Clear loading message interval if it exists
+    if (status.dataset.messageInterval) {
+      clearInterval(parseInt(status.dataset.messageInterval));
+      delete status.dataset.messageInterval;
+    }
+    
+    // Reset button style
+    analyzeBtn.style.transform = '';
+    analyzeBtn.style.background = '';
   }
   
   // Load and display account status
@@ -317,7 +454,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       if (!authToken) {
-        accountStatus.style.display = 'none';
+        // Show account status with sign-in prompt
+        accountPlan.textContent = 'NOT SIGNED IN';
+        accountPlan.className = 'plan-badge';
+        accountUsage.textContent = 'Sign in to track usage';
+        accountUsage.className = 'usage-text';
+        accountStatus.style.display = 'block';
         return;
       }
       
@@ -344,8 +486,8 @@ document.addEventListener('DOMContentLoaded', () => {
       accountPlan.textContent = usage.account_type.toUpperCase();
       accountPlan.className = `plan-badge ${usage.account_type}`;
       
-      // Update usage display
-      const usageLimit = usage.usage_limit === 999999 ? '∞' : usage.usage_limit;
+      // Update usage display with safe encoding
+      const usageLimit = usage.usage_limit === 999999 ? 'Unlimited' : usage.usage_limit;
       accountUsage.textContent = `${usage.monthly_usage}/${usageLimit} this month`;
       
       // Update usage styling based on usage level
@@ -428,6 +570,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Analyze button click handler
   analyzeBtn.addEventListener('click', async () => {
     try {
+      console.log('[DEBUG] Analyze button clicked');
+      
+      // Prevent multiple simultaneous analyses
+      if (analyzeBtn.disabled) {
+        console.log('[DEBUG] Button already disabled, ignoring click');
+        return;
+      }
+      
       // Check consent before proceeding
       const consentResult = await new Promise(resolve => {
         chrome.storage.local.get(['userConsent'], result => {
@@ -435,38 +585,55 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       });
       
+      console.log('[DEBUG] Consent result:', consentResult);
+      
       if (!consentResult) {
+        console.log('[DEBUG] No consent, showing dialog');
         showConsentDialog();
         return;
       }
       
       // Show loading state
+      console.log('[DEBUG] Showing loading state');
       showLoading();
       
       // Get current tab
       const tabs = await chrome.tabs.query({active: true, currentWindow: true});
       const tab = tabs[0];
       
+      console.log('[DEBUG] Current tab URL:', tab.url);
+      
       // Check if the current page is a supported news article
       const supportedSites = ['bbc.com', 'bbc.co.uk', 'cnn.com', 'nytimes.com', 'washingtonpost.com', 'wsj.com', 'bloomberg.com', 'ft.com', 'reuters.com', 'walla.co.il', 'ynet.co.il', 'n12.co.il', 'c14.co.il', 'mako.co.il'];
       
-      if (!supportedSites.some(site => tab.url.includes(site))) {
+      const isSupported = supportedSites.some(site => tab.url.includes(site));
+      console.log('[DEBUG] Is supported site:', isSupported);
+      
+      if (!isSupported) {
+        console.log('[DEBUG] Unsupported site, showing error');
         showError('This extension only works on major news sites like BBC, CNN, NYTimes, etc.');
         return;
       }
       
       // Ask content script to extract article content
+      console.log('[DEBUG] Sending message to content script');
       chrome.tabs.sendMessage(tab.id, { action: 'analyze' }, response => {
+        console.log('[DEBUG] Content script response:', response);
+        console.log('[DEBUG] Chrome runtime error:', chrome.runtime.lastError);
+        
         if (chrome.runtime.lastError) {
+          console.log('[DEBUG] Content script connection failed');
           showError('Could not connect to the page. Please refresh and try again.');
           return;
         }
         
         if (!response || !response.success) {
+          console.log('[DEBUG] Content script extraction failed');
           showError(response?.error || 'Failed to extract article content.');
           return;
         }
         
+        console.log('[DEBUG] Article extracted successfully');
         const article = response.article;
         
         // Check if we have cached results for this URL first
@@ -497,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
           
           console.log('[DEBUG] No cached results found, proceeding with API call');
           // First, test basic connectivity to the API
-          console.log('[DEBUG] Testing API connectivity...');
+          console.log('[DEBUG] Testing API connectivity to:', config.getBaseUrl());
           fetch(config.getBaseUrl(), {
             method: 'GET',
             signal: AbortSignal.timeout(15000) // Increased from 5000 to 15000 (15 seconds)
@@ -506,6 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('[DEBUG] API connectivity test passed:', connectResponse.status);
             
             // Now proceed with the actual analysis
+            console.log('[DEBUG] Calling performAnalysis()');
             performAnalysis();
           })
           .catch(connectError => {
@@ -519,6 +687,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         async function performAnalysis() {
+          console.log('[DEBUG] performAnalysis() called');
+          
           // Check authentication before proceeding
           const authToken = await new Promise(resolve => {
             chrome.storage.local.get(['authToken'], result => {
@@ -526,8 +696,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
           });
           
+          console.log('[DEBUG] Auth token:', authToken ? 'exists' : 'missing');
+          
           if (!authToken) {
-            showError('Please sign in to use this feature. <a href="account.html" target="_blank">Sign in here</a>');
+            console.log('[DEBUG] No auth token, showing sign in error');
+            showError('Please sign in to use this feature. Click "Manage Account" below to sign in.');
             return;
           }
           
@@ -623,6 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     } catch (error) {
+      console.log('[DEBUG] Caught error in analyze handler:', error);
       showError(error.message);
     }
   });

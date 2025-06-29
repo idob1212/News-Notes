@@ -667,8 +667,9 @@ function createSidebar() {
     height: '100%',
     zIndex: '1000000',
     border: 'none',
-    boxShadow: '-5px 0 15px rgba(0, 0, 0, 0.2)',
-    transition: 'transform 0.3s ease'
+    boxShadow: '-2px 0 8px rgba(0, 0, 0, 0.05)',
+    transition: 'transform 0.3s ease',
+    background: '#ffffff'
   });
   
   // Initially hide the sidebar (off-screen)
