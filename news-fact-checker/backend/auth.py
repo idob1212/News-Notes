@@ -138,9 +138,9 @@ def can_user_analyze_article(user_doc: dict) -> bool:
     if user_doc.get("account_type") == AccountType.PREMIUM:
         return True
     
-    # Free users are limited to 5 articles per month
+    # Free users are limited to 10 articles per month
     user_doc = reset_monthly_usage_if_needed(user_doc)
-    return user_doc.get("monthly_usage", 0) < 5
+    return user_doc.get("monthly_usage", 0) < 10
 
 
 def has_user_analyzed_article(user_doc: dict, article_url: str) -> bool:
