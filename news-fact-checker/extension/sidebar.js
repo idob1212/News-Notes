@@ -188,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let messageIndex = 0;
     status.textContent = loadingMessages[messageIndex];
     status.style.display = 'block';
+    status.classList.add('loading');
     
     // Rotate loading messages for engagement
     const messageInterval = setInterval(() => {
@@ -431,6 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('[DEBUG] Showing error:', message);
     status.innerHTML = `Error: ${message}`; // Changed from textContent to innerHTML to support links
     status.style.display = 'block';
+    status.classList.remove('loading'); // Remove loading spinner
     analyzeBtn.disabled = false;
     
     // Clear loading message interval if it exists
@@ -704,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
           
           if (!authToken) {
             console.log('[DEBUG] No auth token, showing sign in error');
-            showError('Please sign in to use this feature. Click "Manage Account" below to sign in.');
+            showError('Please sign in to use this feature. Click the "Manage Account" button to sign in.');
             return;
           }
           

@@ -323,7 +323,7 @@ async def get_user_usage(
             }}
         )
     
-    usage_limit = 999999 if user.account_type == AccountType.PREMIUM else 5
+    usage_limit = 999999 if user.account_type == AccountType.PREMIUM else 10
     
     return UsageInfo(
         account_type=user.account_type,

@@ -285,7 +285,7 @@ button:disabled::before {
   overflow: hidden;
 }
 
-.status::before {
+.status.loading::before {
   content: '';
   position: absolute;
   top: 50%;
