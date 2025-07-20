@@ -174,11 +174,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Show loading state with enhanced UX
-  function showLoading() {
+  function showLoading(isAutoAnalysis = false) {
     analyzeBtn.disabled = true;
     analyzeBtn.style.transform = 'scale(0.98)';
     
-    const loadingMessages = [
+    // Update button text to indicate auto analysis
+    if (isAutoAnalysis) {
+      analyzeBtn.textContent = 'Auto-Analysis in Progress...';
+    }
+    
+    const loadingMessages = isAutoAnalysis ? [
+      'Auto-analyzing article...',
+      'Automatically checking facts...',
+      'Auto-verifying sources...',
+      'Auto-processing content...'
+    ] : [
       'Analyzing article...',
       'Checking facts...',
       'Verifying sources...',
@@ -281,6 +291,9 @@ document.addEventListener('DOMContentLoaded', () => {
       mapLength: appliedHighlightsMap ? appliedHighlightsMap.length : 'undefined'
     });
     
+    // Reset auto analysis flag
+    window.isAutoAnalysisInProgress = false;
+    
     status.style.display = 'none';
     resultCount.style.display = 'block';
     
@@ -332,27 +345,27 @@ document.addEventListener('DOMContentLoaded', () => {
           // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
           // but good for safety.
           if (currentHighlightId) { 
-            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-              if (tabs && tabs.length > 0) {
-                chrome.tabs.sendMessage(tabs[0].id, { action: 'scrollToHighlight', highlightId: currentHighlightId }, (response) => {
-                  if (chrome.runtime.lastError) {
-                    console.error("Error sending scrollToHighlight message:", chrome.runtime.lastError.message);
-                    // Enhanced error feedback
-                    showFeedback(issueElement, 'error', 'Could not scroll to text');
-                  } else if (!response || !response.success) {
-                    console.error("ScrollToHighlight failed:", response?.error || "Unknown error");
-                    // Enhanced error feedback
-                    showFeedback(issueElement, 'error', 'Scrolling failed');
-                  } else {
-                    // Enhanced success feedback
-                    showFeedback(issueElement, 'success', 'Scrolled to text!');
-                  }
-                });
-              } else {
-                console.error("Could not find active tab to send scrollToHighlight message.");
-                showFeedback(issueElement, 'error', 'No active tab found');
+            // Send scroll message via postMessage
+            window.parent.postMessage({ 
+              action: 'scrollToHighlight', 
+              highlightId: currentHighlightId 
+            }, '*');
+            
+            // Set up listener for scroll response
+            const scrollHandler = (event) => {
+              if (event.data.action === 'scrollToHighlightResponse') {
+                window.removeEventListener('message', scrollHandler);
+                if (!event.data.success) {
+                  console.error("Error scrolling to highlight:", event.data.error);
+                  // Enhanced error feedback
+                  showFeedback(issueElement, 'error', 'Could not scroll to text');
+                } else {
+                  // Enhanced success feedback
+                  showFeedback(issueElement, 'success', 'Scrolled to text!');
+                }
               }
-            });
+            };
+            window.addEventListener('message', scrollHandler);
           }
         });
       } else {
@@ -430,6 +443,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Show error message
   function showError(message) {
     console.log('[DEBUG] Showing error:', message);
+    
+    // Reset auto analysis flag
+    window.isAutoAnalysisInProgress = false;
+    
     status.innerHTML = `Error: ${message}`; // Changed from textContent to innerHTML to support links
     status.style.display = 'block';
     status.classList.remove('loading'); // Remove loading spinner
@@ -441,9 +458,10 @@ document.addEventListener('DOMContentLoaded', () => {
       delete status.dataset.messageInterval;
     }
     
-    // Reset button style
+    // Reset button style and text
     analyzeBtn.style.transform = '';
     analyzeBtn.style.background = '';
+    analyzeBtn.textContent = 'Analyze This Article';
   }
   
   // Load and display account status
@@ -517,48 +535,72 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Load cached results for the current URL
   function loadCachedResults() {
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      if (!tabs || tabs.length === 0) {
-        console.warn('No active tab found for loading cached results');
-        return;
+    // Request URL from content script (safer than cross-origin access)
+    const urlHandler = (event) => {
+      if (event.data.action === 'urlResponse') {
+        window.removeEventListener('message', urlHandler);
+        if (event.data.success && event.data.url) {
+          const currentUrl = event.data.url;
+          console.log('[sidebar.js] Got URL for cached results:', currentUrl);
+          loadCachedResultsForUrl(currentUrl);
+        } else {
+          console.warn('Failed to get URL for cached results');
+        }
       }
+    };
+    
+    window.addEventListener('message', urlHandler);
+    
+    // Request URL from content script
+    window.parent.postMessage({
+      action: 'getUrl'
+    }, '*');
+    
+    // Set timeout for URL request
+    setTimeout(() => {
+      window.removeEventListener('message', urlHandler);
+    }, 3000);
+  }
+  
+  // Helper function to load cached results for a specific URL
+  function loadCachedResultsForUrl(currentUrl) {
+    
+    chrome.storage.local.get(['cachedResults'], function(result) {
+      const cachedResultsObj = result.cachedResults || {};
       
-      const currentUrl = tabs[0].url;
-      
-      chrome.storage.local.get(['cachedResults'], function(result) {
-        const cachedResultsObj = result.cachedResults || {};
+      if (cachedResultsObj[currentUrl]) {
+        const cachedIssues = cachedResultsObj[currentUrl];
+        console.log('[sidebar.js] Found cached results for URL:', currentUrl, 'Issues count:', cachedIssues.length);
         
-        if (cachedResultsObj[currentUrl]) {
-          const cachedIssues = cachedResultsObj[currentUrl];
-          console.log('[sidebar.js] Found cached results for URL:', currentUrl, 'Issues count:', cachedIssues.length);
+        // Add a delay to ensure content script is fully loaded
+        setTimeout(() => {
+          // Re-highlight the issues to get the mapping for clickability via postMessage
+          window.parent.postMessage({
+            action: 'highlight',
+            issues: cachedIssues
+          }, '*');
           
-          // Add a delay to ensure content script is fully loaded
-          setTimeout(() => {
-            // Re-highlight the issues to get the mapping for clickability
-            chrome.tabs.sendMessage(tabs[0].id, {
-              action: 'highlight',
-              issues: cachedIssues
-            }, highlightResponse => {
-              if (chrome.runtime.lastError) {
-                console.warn('Failed to send highlight message to content script:', chrome.runtime.lastError.message);
-                // Show results anyway, but without click functionality
-                showResults(cachedIssues, []);
-              } else if (!highlightResponse || !highlightResponse.success) {
-                console.warn('Content script failed to highlight cached issues. Response:', highlightResponse);
+          // Set up listener for highlight response
+          const highlightHandler = (event) => {
+            if (event.data.action === 'highlightResponse') {
+              window.removeEventListener('message', highlightHandler);
+              if (!event.data.success) {
+                console.warn('Failed to highlight cached issues on page');
                 // Show results anyway, but without click functionality
                 showResults(cachedIssues, []);
               } else {
-                console.log('[sidebar.js] Successfully highlighted cached issues. Applied highlights map:', highlightResponse.appliedHighlightsMap);
+                console.log('[sidebar.js] Successfully highlighted cached issues. Applied highlights map:', event.data.appliedHighlightsMap);
                 // Show results with proper highlight mapping
-                showResults(cachedIssues, highlightResponse.appliedHighlightsMap);
+                showResults(cachedIssues, event.data.appliedHighlightsMap);
               }
-            });
-          }, 500); // 500ms delay to ensure content script is ready
+            }
+          };
+          window.addEventListener('message', highlightHandler);
+        }, 500); // 500ms delay to ensure content script is ready
         } else {
           console.log('[sidebar.js] No cached results found for URL:', currentUrl);
         }
       });
-    });
   }
   
   // Save results to cache
@@ -601,18 +643,91 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Show loading state
       console.log('[DEBUG] Showing loading state');
-      showLoading();
+      const isAutoAnalysis = window.isAutoAnalysisInProgress || false;
+      showLoading(isAutoAnalysis);
       
-      // Get current tab
-      const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-      const tab = tabs[0];
+      // Get current URL from content script (safer than cross-origin access)
+      let currentUrl = null;
       
-      console.log('[DEBUG] Current tab URL:', tab.url);
+      // Request URL from content script with retry logic
+      let urlRequestAttempts = 0;
+      const maxUrlRequestAttempts = 3;
+      
+      function requestUrlFromContentScript() {
+        urlRequestAttempts++;
+        console.log(`[DEBUG] Requesting URL from content script (attempt ${urlRequestAttempts})`);
+        
+        const urlHandler = (event) => {
+          console.log('[DEBUG] Received message in sidebar:', event.data);
+          if (event.data.action === 'urlResponse') {
+            window.removeEventListener('message', urlHandler);
+            if (event.data.success && event.data.url) {
+              currentUrl = event.data.url;
+              console.log('[DEBUG] Got URL from content script:', currentUrl);
+              continueWithAnalysis();
+            } else {
+              console.log('[DEBUG] Failed to get URL from content script');
+              showError('Could not access the current page URL. Please refresh and try again.');
+            }
+          }
+        };
+        
+        window.addEventListener('message', urlHandler);
+        
+        // Request URL from content script
+        console.log('[DEBUG] Sending getUrl message to parent window');
+        window.parent.postMessage({
+          action: 'getUrl'
+        }, '*');
+        
+        // Set timeout for URL request with retry
+        setTimeout(() => {
+          window.removeEventListener('message', urlHandler);
+          if (!currentUrl) {
+            if (urlRequestAttempts < maxUrlRequestAttempts) {
+              console.log(`[DEBUG] URL request attempt ${urlRequestAttempts} timed out, retrying...`);
+              setTimeout(() => requestUrlFromContentScript(), 1000); // Retry after 1 second
+            } else {
+              console.log('[DEBUG] All URL request attempts timed out, trying fallback method');
+              // Fallback: try chrome.tabs.query as last resort
+              try {
+                chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+                  if (tabs && tabs[0] && tabs[0].url) {
+                    currentUrl = tabs[0].url;
+                    console.log('[DEBUG] Got URL from chrome.tabs fallback:', currentUrl);
+                    continueWithAnalysis();
+                  } else {
+                    console.log('[DEBUG] Chrome.tabs fallback also failed');
+                    showError('Could not get page URL. Please refresh and try again.');
+                  }
+                });
+              } catch (error) {
+                console.log('[DEBUG] Chrome.tabs fallback error:', error);
+                showError('Could not get page URL. Please refresh and try again.');
+              }
+            }
+          }
+        }, 3000); // Reduced timeout to 3 seconds per attempt
+      }
+      
+      // Start the URL request process with a small delay to ensure iframe is ready
+      setTimeout(() => {
+        requestUrlFromContentScript();
+      }, 500);
+      
+      // Function to continue with analysis once we have the URL
+      function continueWithAnalysis() {
+        if (!currentUrl) {
+          showError('No URL available for analysis.');
+          return;
+        }
+      
+      console.log('[DEBUG] Current URL:', currentUrl);
       
       // Check if the current page is a supported news article
       const supportedSites = ['bbc.com', 'bbc.co.uk', 'cnn.com', 'nytimes.com', 'washingtonpost.com', 'wsj.com', 'bloomberg.com', 'ft.com', 'reuters.com', 'walla.co.il', 'ynet.co.il', 'n12.co.il', 'c14.co.il', 'mako.co.il'];
       
-      const isSupported = supportedSites.some(site => tab.url.includes(site));
+      const isSupported = supportedSites.some(site => currentUrl.includes(site));
       console.log('[DEBUG] Is supported site:', isSupported);
       
       if (!isSupported) {
@@ -621,52 +736,58 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       
-      // Ask content script to extract article content
-      console.log('[DEBUG] Sending message to content script');
-      chrome.tabs.sendMessage(tab.id, { action: 'analyze' }, response => {
-        console.log('[DEBUG] Content script response:', response);
-        console.log('[DEBUG] Chrome runtime error:', chrome.runtime.lastError);
-        
-        if (chrome.runtime.lastError) {
-          console.log('[DEBUG] Content script connection failed');
-          showError('Could not connect to the page. Please refresh and try again.');
-          return;
-        }
-        
-        if (!response || !response.success) {
-          console.log('[DEBUG] Content script extraction failed');
-          showError(response?.error || 'Failed to extract article content.');
-          return;
-        }
-        
-        console.log('[DEBUG] Article extracted successfully');
-        const article = response.article;
-        
-        // Check if we have cached results for this URL first
-        chrome.storage.local.get(['cachedResults'], function(result) {
-          const cachedResultsObj = result.cachedResults || {};
-          const cachedResult = cachedResultsObj[tab.url];
+      // Ask content script to extract article content via postMessage
+      console.log('[DEBUG] Sending message to content script via postMessage');
+      
+      // Set up listener for response from content script
+      const messageHandler = (event) => {
+        if (event.data.action === 'analyzeResponse') {
+          window.removeEventListener('message', messageHandler);
           
-          if (cachedResult && cachedResult.length >= 0) {
-            console.log('[DEBUG] Found cached results, using cached data instead of API call');
-            status.style.display = 'none';
-            
-            // Highlight issues on the page using cached data
-            chrome.tabs.sendMessage(tab.id, {
-              action: 'highlight',
-              issues: cachedResult
-            }, highlightResponse => {
-              console.log('[sidebar.js] Highlight response received for cached results:', highlightResponse);
-              
-              if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
-                console.warn('Failed to highlight cached issues on the page.', chrome.runtime.lastError);
-                showResults(cachedResult, []);
-              } else {
-                showResults(cachedResult, highlightResponse.appliedHighlightsMap);
-              }
-            });
+          const response = event.data;
+          console.log('[DEBUG] Content script response:', response);
+          
+          if (!response.success) {
+            console.log('[DEBUG] Content script extraction failed');
+            showError(response.error || 'Failed to extract article content.');
             return;
           }
+          
+          console.log('[DEBUG] Article extracted successfully');
+          const article = response.article;
+        
+          // Check if we have cached results for this URL first
+          chrome.storage.local.get(['cachedResults'], function(result) {
+            const cachedResultsObj = result.cachedResults || {};
+            const cachedResult = cachedResultsObj[currentUrl];
+            
+            if (cachedResult && cachedResult.length >= 0) {
+              console.log('[DEBUG] Found cached results, using cached data instead of API call');
+              status.style.display = 'none';
+              
+              // Highlight issues on the page using cached data via postMessage
+              window.parent.postMessage({
+                action: 'highlight',
+                issues: cachedResult
+              }, '*');
+              
+              // Set up listener for highlight response
+              const highlightHandler = (event) => {
+                if (event.data.action === 'highlightResponse') {
+                  window.removeEventListener('message', highlightHandler);
+                  console.log('[sidebar.js] Highlight response received for cached results:', event.data);
+                  
+                  if (!event.data.success) {
+                    console.warn('Failed to highlight cached issues on the page.');
+                    showResults(cachedResult, []);
+                  } else {
+                    showResults(cachedResult, event.data.appliedHighlightsMap);
+                  }
+                }
+              };
+              window.addEventListener('message', highlightHandler);
+              return;
+            }
           
           console.log('[DEBUG] No cached results found, proceeding with API call');
           // First, test basic connectivity to the API
@@ -680,7 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Now proceed with the actual analysis
             console.log('[DEBUG] Calling performAnalysis()');
-            performAnalysis();
+            performAnalysis(article);
           })
           .catch(connectError => {
             console.log('[DEBUG] API connectivity test failed:', connectError);
@@ -690,9 +811,19 @@ document.addEventListener('DOMContentLoaded', () => {
               showError('Cannot connect to analysis server. Please check your internet connection.');
             }
           });
-        });
-        
-        async function performAnalysis() {
+          }); // Close chrome.storage.local.get callback
+        }
+      };
+      
+      window.addEventListener('message', messageHandler);
+      
+      // Send the analyze request to content script
+      window.parent.postMessage({
+        action: 'analyze'
+      }, '*');
+      
+      // Define performAnalysis function in proper scope
+      async function performAnalysis(article) {
           console.log('[DEBUG] performAnalysis() called');
           
           // Check authentication before proceeding
@@ -760,28 +891,35 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('[DEBUG] Data received:', { issuesCount: data.issues?.length });
             
             // Cache the results for this URL
-            cacheResults(tab.url, data.issues);
+            cacheResults(currentUrl, data.issues);
             
             // Refresh account status to show updated usage
             loadAccountStatus();
             
-            // Highlight issues on the page
-            chrome.tabs.sendMessage(tab.id, {
+            // Highlight issues on the page via postMessage
+            window.parent.postMessage({
               action: 'highlight',
               issues: data.issues
-            }, highlightResponse => {
-              console.log('[sidebar.js] Highlight response received:', highlightResponse);
-              
-              if (chrome.runtime.lastError || !highlightResponse || !highlightResponse.success) {
-                console.warn('Failed to highlight issues on the page.', chrome.runtime.lastError);
-                // Show results anyway, but without click functionality  
-                showResults(data.issues, []);
-              } else {
-                console.log('[sidebar.js] Highlight successful, appliedHighlightsMap:', highlightResponse.appliedHighlightsMap);
-                // Show results in sidebar
-                showResults(data.issues, highlightResponse.appliedHighlightsMap);
+            }, '*');
+            
+            // Set up listener for highlight response
+            const highlightHandler = (event) => {
+              if (event.data.action === 'highlightResponse') {
+                window.removeEventListener('message', highlightHandler);
+                console.log('[sidebar.js] Highlight response received:', event.data);
+                
+                if (!event.data.success) {
+                  console.warn('Failed to highlight issues on the page.');
+                  // Show results anyway, but without click functionality  
+                  showResults(data.issues, []);
+                } else {
+                  console.log('[sidebar.js] Highlight successful, appliedHighlightsMap:', event.data.appliedHighlightsMap);
+                  // Show results in sidebar
+                  showResults(data.issues, event.data.appliedHighlightsMap);
+                }
               }
-            });
+            };
+            window.addEventListener('message', highlightHandler);
           })
           .catch(error => {
             console.log('[DEBUG] Fetch error caught:', error.name, error.message);
@@ -800,7 +938,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           });
         }
-      });
+      } // End of continueWithAnalysis function
+      
     } catch (error) {
       console.log('[DEBUG] Caught error in analyze handler:', error);
       showError(error.message);
@@ -809,15 +948,38 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Close button click handler
   closeBtn.addEventListener('click', () => {
-    // Send message to content script to close sidebar
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      chrome.tabs.sendMessage(tabs[0].id, {action: 'closeSidebar'});
-    });
+    // Send message to content script to close sidebar via postMessage
+    window.parent.postMessage({action: 'closeSidebar'}, '*');
   });
   
   // Manage account button click handler
   manageAccountBtn.addEventListener('click', () => {
     // Open account management page in new tab
     chrome.tabs.create({ url: chrome.runtime.getURL('account.html') });
+  });
+  
+  // Listen for messages from content script (auto analysis trigger)
+  window.addEventListener('message', (event) => {
+    // Only accept messages from the same origin
+    if (event.origin !== window.location.origin) {
+      return;
+    }
+    
+    if (event.data.action === 'triggerAnalysis' && event.data.isAutoAnalysis) {
+      console.log('Received auto analysis trigger from content script');
+      
+      // Check if analysis is already in progress
+      if (analyzeBtn.disabled) {
+        console.log('Analysis already in progress, ignoring auto analysis trigger');
+        return;
+      }
+      
+      // Set a flag to indicate this is auto analysis
+      window.isAutoAnalysisInProgress = true;
+      
+      // Trigger the analyze button click programmatically
+      console.log('Starting auto analysis...');
+      analyzeBtn.click();
+    }
   });
 }); 

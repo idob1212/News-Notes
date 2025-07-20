@@ -174,4 +174,41 @@ async function updateBadge(text, color) {
     await chrome.action.setBadgeText({ text: text });
     await chrome.action.setBadgeBackgroundColor({ color: color });
   }
-} 
+}
+
+// Handle messages from extension components
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("Background script received message:", message);
+  
+  if (message.action === 'updateAutoAnalysisSettings') {
+    console.log("Updating auto-analysis settings:", message);
+    // Settings are already saved by the sender, just acknowledge
+    sendResponse({ success: true, message: 'Auto-analysis settings updated' });
+    return true;
+  } else if (message.action === 'triggerAutoAnalysis') {
+    console.log("Triggering auto-analysis test");
+    // Get the current active tab and trigger analysis
+    chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+      if (tabs[0]) {
+        // Send message to content script to start auto analysis
+        chrome.tabs.sendMessage(tabs[0].id, { 
+          action: 'startAutoAnalysis',
+          isTest: true 
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("Error triggering auto-analysis:", chrome.runtime.lastError.message);
+            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            console.log("Auto-analysis triggered successfully:", response);
+            sendResponse({ success: true, message: 'Auto-analysis triggered' });
+          }
+        });
+      } else {
+        sendResponse({ success: false, error: 'No active tab found' });
+      }
+    });
+    return true;
+  }
+  
+  return false;
+}); 
