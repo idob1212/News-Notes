@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
@@ -23,7 +24,9 @@ from utils import (
     create_analysis_prompt,
     get_cached_analysis,
     save_analysis_to_cache,
-    perform_fact_check_analysis
+    perform_fact_check_analysis,
+    perform_fact_check_analysis_stream,
+    simulate_streaming_analysis
 )
 from auth import (
     hash_password, verify_password, create_access_token, get_current_user,
@@ -188,9 +191,9 @@ async def health_check():
     """Detailed health check endpoint."""
     return {
         "status": "healthy",
-        "database": "connected" if article_analyses_collection else "disconnected",
+        "database": "connected" if article_analyses_collection is not None else "disconnected",
         "llm": "configured" if perplexity_llm else "not configured",
-        "users_db": "connected" if users_collection else "disconnected"
+        "users_db": "connected" if users_collection is not None else "disconnected"
     }
 
 # Authentication endpoints
@@ -613,6 +616,7 @@ async def analyze_article(
         # Process new analysis
         response = process_new_analysis(article)
         
+        
         # Increment user usage for new article
         increment_user_usage(users_collection, user.email, article.url)
         
@@ -626,6 +630,116 @@ async def analyze_article(
     except Exception as e:
         elapsed_time = time.time() - start_time
         analysis_logger.error(f"Analysis failed after {elapsed_time:.2f} seconds", error=e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyze/stream")
+async def analyze_article_stream(
+    article: ArticleRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Analyze a news article for fact-checking issues with streaming response.
+    Returns Server-Sent Events (SSE) for real-time updates.
+    
+    Args:
+        article: Article data including title, content, and URL
+        credentials: JWT token for authentication
+        
+    Returns:
+        StreamingResponse: SSE stream with analysis progress and results
+        
+    Raises:
+        HTTPException: If analysis fails or usage limit exceeded
+    """
+    start_time = time.time()
+    
+    try:
+        # Get current user
+        user = await get_current_user(credentials, users_collection)
+        
+        # Get user document for usage checking
+        user_doc = users_collection.find_one({"email": user.email})
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check if user can analyze another article
+        if not can_user_analyze_article(user_doc):
+            raise HTTPException(
+                status_code=403, 
+                detail="Monthly analysis limit reached. Please upgrade to premium for unlimited access."
+            )
+        
+        analysis_logger.info(f"Starting streaming analysis for URL: {article.url} (User: {user.email})")
+        
+        # Check for cached analysis first
+        cached_issues = get_cached_analysis(article_analyses_collection, article.url)
+        if cached_issues and settings.ENABLE_STREAMING:
+            analysis_logger.info(f"Found cached analysis for streaming URL: {article.url}")
+            
+            # Increment usage for cached result
+            increment_user_usage(users_collection, user.email, article.url)
+            
+            # Stream the cached results for better UX
+            async def stream_cached_results():
+                async for event in simulate_streaming_analysis(cached_issues, article.url):
+                    yield event
+            
+            return StreamingResponse(
+                stream_cached_results(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "Cache-Control"
+                }
+            )
+        
+        # Perform new streaming analysis
+        async def stream_new_analysis():
+            try:
+                # Use streaming analysis function
+                async for event in perform_fact_check_analysis_stream(
+                    llm=perplexity_llm,
+                    prompt=analysis_prompt,
+                    title=article.title,
+                    url=article.url,
+                    content=article.content,
+                    collection=article_analyses_collection
+                ):
+                    yield event
+                
+            except Exception as e:
+                analysis_logger.error(f"Streaming analysis error: {e}")
+                import json
+                from models import AnalysisError
+                error_event = AnalysisError(
+                    error_code="STREAMING_ERROR",
+                    error_details=str(e),
+                    message="Streaming analysis failed"
+                )
+                yield f"data: {json.dumps(error_event.model_dump())}\n\n"
+        
+        # Increment user usage for new analysis (we do this upfront for streaming)
+        increment_user_usage(users_collection, user.email, article.url)
+        
+        return StreamingResponse(
+            stream_new_analysis(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Cache-Control"
+            }
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        analysis_logger.error(f"Streaming analysis setup failed after {elapsed_time:.2f} seconds", error=e)
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

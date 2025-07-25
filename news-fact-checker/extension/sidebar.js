@@ -64,6 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultCount = document.getElementById('resultCount');
   const issueList = document.getElementById('issueList');
   
+  // Streaming progress elements
+  const streamingProgress = document.getElementById('streamingProgress');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const streamingMode = document.getElementById('streamingMode');
+  const issuesFound = document.getElementById('issuesFound');
+  
   // Account status elements
   const accountStatus = document.getElementById('accountStatus');
   const accountPlan = document.getElementById('accountPlan');
@@ -183,17 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
       analyzeBtn.textContent = 'Auto-Analysis in Progress...';
     }
     
-    const loadingMessages = isAutoAnalysis ? [
-      'Auto-analyzing article...',
-      'Automatically checking facts...',
-      'Auto-verifying sources...',
-      'Auto-processing content...'
-    ] : [
-      'Analyzing article...',
-      'Checking facts...',
-      'Verifying sources...',
-      'Processing content...'
-    ];
+    const loadingMessages = [''];
     
     let messageIndex = 0;
     status.textContent = loadingMessages[messageIndex];
@@ -208,6 +205,55 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Store interval ID for cleanup
     status.dataset.messageInterval = messageInterval;
+  }
+  
+  // Show streaming loading state with progress updates
+  function showStreamingLoading(isAutoAnalysis = false) {
+    analyzeBtn.disabled = true;
+    analyzeBtn.style.transform = 'scale(0.98)';
+    
+    if (isAutoAnalysis) {
+      analyzeBtn.textContent = 'Auto-Analyzing...';
+    } else {
+      analyzeBtn.textContent = 'Analyzing...';
+    }
+    
+    // Hide regular status and show streaming progress
+    status.style.display = 'none';
+    streamingProgress.style.display = 'block';
+    
+    // Initialize progress
+    progressFill.style.width = '0%';
+    progressText.textContent = '';
+    streamingMode.textContent = isAutoAnalysis ? '🔄 Auto Analysis' : '🔄 Analyzing...';
+    issuesFound.textContent = '0 issues found';
+    
+    // Clear any existing result count
+    resultCount.style.display = 'none';
+    issueList.innerHTML = '';
+  }
+  
+  // Update streaming progress
+  function updateStreamingProgress(percentage, step, issueCount = 0) {
+    if (progressFill) {
+      progressFill.style.width = `${Math.min(100, Math.max(0, percentage))}%`;
+    }
+    if (progressText) {
+      progressText.textContent = step;
+    }
+    if (issuesFound) {
+      const issueText = issueCount === 0 ? '0 issues found' :
+                       issueCount === 1 ? '1 issue found' :
+                       `${issueCount} issues found`;
+      issuesFound.textContent = issueText;
+    }
+  }
+  
+  // Hide streaming progress and show regular results
+  function hideStreamingProgress() {
+    if (streamingProgress) {
+      streamingProgress.style.display = 'none';
+    }
   }
   
   // Celebration effect for completed analysis
@@ -315,115 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add issues to the list with staggered animations
     issues.forEach((issue, index) => { // index here is originalIssueIndex
-      console.log(`[sidebar.js] Processing issue ${index}:`, {
-        text: issue.text.substring(0, 100) + '...',
-        appliedHighlightsMap: appliedHighlightsMap
-      });
-      
-      const issueElement = document.createElement('div');
-      issueElement.className = 'issue';
-      
-      // Find the first mapping for this original issue index
-      const mappingEntry = appliedHighlightsMap ? appliedHighlightsMap.find(m => m.originalIssueIndex === index) : null;
-      console.log(`[sidebar.js] Mapping entry for issue ${index}:`, mappingEntry);
-      
-      if (mappingEntry && mappingEntry.highlightId) {
-        console.log(`[sidebar.js] Issue ${index} WILL BE made clickable. highlightId:`, mappingEntry.highlightId);
-        issueElement.dataset.highlightId = mappingEntry.highlightId;
-        issueElement.style.cursor = 'pointer'; // Indicate it's clickable
-        
-        issueElement.addEventListener('click', () => {
-          const currentHighlightId = issueElement.dataset.highlightId;
-          console.log('[sidebar.js] Issue clicked, highlightId:', currentHighlightId);
-          
-          // Add immediate haptic-like feedback
-          issueElement.style.transform = 'scale(0.98)';
-          setTimeout(() => {
-            issueElement.style.transform = '';
-          }, 150);
-          
-          // This inner check for currentHighlightId is technically redundant if mappingEntry.highlightId was valid,
-          // but good for safety.
-          if (currentHighlightId) { 
-            // Send scroll message via postMessage
-            window.parent.postMessage({ 
-              action: 'scrollToHighlight', 
-              highlightId: currentHighlightId 
-            }, '*');
-            
-            // Set up listener for scroll response
-            const scrollHandler = (event) => {
-              if (event.data.action === 'scrollToHighlightResponse') {
-                window.removeEventListener('message', scrollHandler);
-                if (!event.data.success) {
-                  console.error("Error scrolling to highlight:", event.data.error);
-                  // Enhanced error feedback
-                  showFeedback(issueElement, 'error', 'Could not scroll to text');
-                } else {
-                  // Enhanced success feedback
-                  showFeedback(issueElement, 'success', 'Scrolled to text!');
-                }
-              }
-            };
-            window.addEventListener('message', scrollHandler);
-          }
-        });
-      } else {
-        console.log(`[sidebar.js] Issue ${index} WILL NOT be made clickable.`);
-        issueElement.classList.add('issue-not-scrollable');
-      }
-      
-      const textElement = document.createElement('div');
-      textElement.className = 'issue-text';
-      textElement.textContent = issue.text;
-      issueElement.appendChild(textElement);
-      
-      const explanationElement = document.createElement('div');
-      explanationElement.className = 'issue-explanation';
-      explanationElement.textContent = issue.explanation;
-      issueElement.appendChild(explanationElement);
-      
-      const confidenceElement = document.createElement('div');
-      confidenceElement.className = 'issue-confidence';
-      confidenceElement.textContent = `Confidence: ${Math.round(issue.confidence_score * 100)}%`;
-      issueElement.appendChild(confidenceElement);
-      
-      // Add sources if available
-      if (issue.source_urls && issue.source_urls.length > 0) {
-        const sourcesDiv = document.createElement('div');
-        sourcesDiv.className = 'sources';
-        
-        issue.source_urls.forEach(url => {
-          const link = document.createElement('a');
-          link.href = url;
-          link.textContent = url;
-          link.target = '_blank';
-          link.rel = 'noopener noreferrer';
-          
-          // Ensure link is clickable
-          link.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent triggering the issue click
-            // Let the default link behavior handle the navigation
-          });
-          
-          sourcesDiv.appendChild(link);
-        });
-        
-        issueElement.appendChild(sourcesDiv);
-      }
-      
-      // Add staggered animation entrance
-      issueElement.style.opacity = '0';
-      issueElement.style.transform = 'translateY(20px)';
-      issueElement.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
-      
-      issueList.appendChild(issueElement);
-      
-      // Trigger staggered animation
-      setTimeout(() => {
-        issueElement.style.opacity = '1';
-        issueElement.style.transform = 'translateY(0)';
-      }, index * 150); // Stagger by 150ms per issue
+      addIssueToUI(issue, index, appliedHighlightsMap);
     });
     
     // Re-enable the button with enhanced feedback
@@ -438,6 +376,205 @@ document.addEventListener('DOMContentLoaded', () => {
         analyzeBtn.textContent = 'Analyze This Article';
       }, 2000);
     }, issues.length * 150 + 300); // Wait for all animations to complete
+  }
+  
+  // Add a single issue to the UI (used for both batch and streaming)
+  function addIssueToUI(issue, index, appliedHighlightsMap, animate = true) {
+    console.log(`[sidebar.js] Processing issue ${index}:`, {
+      text: issue.text.substring(0, 100) + '...',
+      appliedHighlightsMap: appliedHighlightsMap
+    });
+    
+    const issueElement = document.createElement('div');
+    issueElement.className = 'issue';
+    
+    // Find the first mapping for this original issue index
+    const mappingEntry = appliedHighlightsMap ? appliedHighlightsMap.find(m => m.originalIssueIndex === index) : null;
+    console.log(`[sidebar.js] Mapping entry for issue ${index}:`, mappingEntry);
+    
+    if (mappingEntry && mappingEntry.highlightId) {
+      console.log(`[sidebar.js] Issue ${index} WILL BE made clickable. highlightId:`, mappingEntry.highlightId);
+      issueElement.dataset.highlightId = mappingEntry.highlightId;
+      issueElement.style.cursor = 'pointer';
+      
+      // Add visual indicator for match quality
+      if (mappingEntry.isApproximate) {
+        issueElement.classList.add('approximate-match');
+        issueElement.title = 'Approximate match found - text may not be exactly as shown';
+      } else if (mappingEntry.matchFound) {
+        issueElement.classList.add('exact-match');
+        issueElement.title = 'Click to scroll to highlighted text';
+      }
+      
+      // Enhanced click handler with better feedback
+      issueElement.addEventListener('click', () => {
+        const currentHighlightId = issueElement.dataset.highlightId;
+        console.log('[sidebar.js] Issue clicked, highlightId:', currentHighlightId);
+        
+        // Enhanced visual feedback animation
+        issueElement.style.transform = 'scale(0.98)';
+        issueElement.style.filter = 'brightness(0.95)';
+        
+        setTimeout(() => {
+          issueElement.style.transform = '';
+          issueElement.style.filter = '';
+        }, 200);
+        
+        if (currentHighlightId) { 
+          // Send scroll message via postMessage
+          window.parent.postMessage({ 
+            action: 'scrollToHighlight', 
+            highlightId: currentHighlightId 
+          }, '*');
+          
+          // Set up listener for scroll response with timeout
+          const scrollHandler = (event) => {
+            if (event.data.action === 'scrollToHighlightResponse') {
+              window.removeEventListener('message', scrollHandler);
+              if (!event.data.success) {
+                console.error("Error scrolling to highlight:", event.data.error);
+                showFeedback(issueElement, 'error', mappingEntry.isApproximate ? 'Approximate text location' : 'Could not scroll to text');
+              } else {
+                showFeedback(issueElement, 'success', mappingEntry.isApproximate ? 'Scrolled to approximate match' : 'Scrolled to highlighted text');
+              }
+            }
+          };
+          
+          window.addEventListener('message', scrollHandler);
+          
+          // Cleanup handler after timeout
+          setTimeout(() => {
+            window.removeEventListener('message', scrollHandler);
+          }, 3000);
+        }
+      });
+      
+      // Enhanced hover effects
+      issueElement.addEventListener('mouseenter', () => {
+        issueElement.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.15)';
+        issueElement.style.borderColor = '#3b82f6';
+      });
+      
+      issueElement.addEventListener('mouseleave', () => {
+        issueElement.style.boxShadow = '';
+        issueElement.style.borderColor = '';
+      });
+      
+    } else {
+      console.log(`[sidebar.js] Issue ${index} WILL NOT be made clickable.`);
+      issueElement.classList.add('issue-not-scrollable');
+      issueElement.title = 'Text not found on page - may have been modified or is not visible';
+    }
+    
+    const textElement = document.createElement('div');
+    textElement.className = 'issue-text';
+    textElement.textContent = issue.text;
+    issueElement.appendChild(textElement);
+    
+    const explanationElement = document.createElement('div');
+    explanationElement.className = 'issue-explanation';
+    explanationElement.textContent = issue.explanation;
+    issueElement.appendChild(explanationElement);
+    
+    const confidenceElement = document.createElement('div');
+    confidenceElement.className = 'issue-confidence';
+    confidenceElement.textContent = `Confidence: ${Math.round(issue.confidence_score * 100)}%`;
+    issueElement.appendChild(confidenceElement);
+    
+    // Add sources if available
+    if (issue.source_urls && issue.source_urls.length > 0) {
+      const sourcesDiv = document.createElement('div');
+      sourcesDiv.className = 'sources';
+      
+      issue.source_urls.forEach(url => {
+        const link = document.createElement('a');
+        link.href = url;
+        link.textContent = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        
+        // Ensure link is clickable
+        link.addEventListener('click', (e) => {
+          e.stopPropagation(); // Prevent triggering the issue click
+        });
+        
+        sourcesDiv.appendChild(link);
+      });
+      
+      issueElement.appendChild(sourcesDiv);
+    }
+    
+    if (animate) {
+      // Add staggered animation entrance
+      issueElement.style.opacity = '0';
+      issueElement.style.transform = 'translateY(20px)';
+      issueElement.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
+    }
+    
+    issueList.appendChild(issueElement);
+    
+    if (animate) {
+      // Trigger staggered animation
+      setTimeout(() => {
+        issueElement.style.opacity = '1';
+        issueElement.style.transform = 'translateY(0)';
+      }, index * 150); // Stagger by 150ms per issue
+    }
+    
+    return issueElement;
+  }
+  
+  // Handle streaming issue (add issue with immediate highlighting)
+  function handleStreamingIssue(issue, index, currentUrl) {
+    console.log(`[sidebar.js] Handling streaming issue ${index}`);
+    
+    // Add to UI immediately with streaming animation
+    const issueElement = addIssueToUI(issue, index, [], false);
+    issueElement.classList.add('streaming-new'); // Add streaming animation class
+    
+    // Show results container if not visible
+    resultCount.style.display = 'block';
+    
+    // Highlight the issue in the content
+    window.parent.postMessage({
+      action: 'highlight',
+      issues: [issue]
+    }, '*');
+    
+    // Set up listener for highlight response to update clickability
+    const highlightHandler = (event) => {
+      if (event.data.action === 'highlightResponse') {
+        window.removeEventListener('message', highlightHandler);
+        if (event.data.success && event.data.appliedHighlightsMap) {
+          // Update the issue element with highlight mapping
+          const mappingEntry = event.data.appliedHighlightsMap.find(m => m.originalIssueIndex === 0);
+          if (mappingEntry && mappingEntry.highlightId && issueElement) {
+            issueElement.dataset.highlightId = mappingEntry.highlightId;
+            issueElement.style.cursor = 'pointer';
+            issueElement.classList.remove('issue-not-scrollable');
+            
+            // Add click handler
+            issueElement.addEventListener('click', () => {
+              const currentHighlightId = issueElement.dataset.highlightId;
+              if (currentHighlightId) {
+                window.parent.postMessage({ 
+                  action: 'scrollToHighlight', 
+                  highlightId: currentHighlightId 
+                }, '*');
+              }
+            });
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('message', highlightHandler);
+    setTimeout(() => window.removeEventListener('message', highlightHandler), 5000); // Cleanup after 5s
+    
+    // Remove streaming animation class after animation completes
+    setTimeout(() => {
+      issueElement.classList.remove('streaming-new');
+    }, 500);
   }
   
   // Show error message
@@ -822,7 +959,287 @@ document.addEventListener('DOMContentLoaded', () => {
         action: 'analyze'
       }, '*');
       
-      // Define performAnalysis function in proper scope
+      // Streaming analysis using fetch with streaming response
+      async function performStreamingAnalysis(article, currentUrl, authToken) {
+        console.log('[DEBUG] Starting streaming analysis');
+        
+        return new Promise((resolve, reject) => {
+          const streamUrl = `${config.getBaseUrl()}/analyze/stream`;
+          console.log('[DEBUG] Streaming URL:', streamUrl);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            console.log('[DEBUG] Streaming timeout after 300 seconds');
+            controller.abort();
+            reject(new Error('Streaming analysis timed out'));
+          }, 300000); // 5 minutes for streaming
+          
+          fetch(streamUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+              'Accept': 'text/event-stream',
+              'Cache-Control': 'no-cache'
+            },
+            credentials: 'omit',
+            body: JSON.stringify(article),
+            signal: controller.signal
+          })
+          .then(async response => {
+            console.log('[DEBUG] Streaming response received:', response.status);
+            
+            if (!response.ok) {
+              clearTimeout(timeoutId);
+              throw new Error(`Streaming failed: ${response.status}`);
+            }
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let issueCount = 0;
+            let streamingIssues = [];
+            
+            showStreamingLoading(window.isAutoAnalysisInProgress || false);
+            
+            async function readStream() {
+              try {
+                const { done, value } = await reader.read();
+                
+                if (done) {
+                  clearTimeout(timeoutId);
+                  console.log('[DEBUG] Streaming completed');
+                  
+                  // Cache the results
+                  cacheResults(currentUrl, streamingIssues);
+                  
+                  // Refresh account status
+                  loadAccountStatus();
+                  
+                  // Final UI updates
+                  finalizeStreamingAnalysis(streamingIssues);
+                  
+                  resolve(streamingIssues);
+                  return;
+                }
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const eventData = JSON.parse(line.slice(6));
+                      console.log('[DEBUG] Streaming event:', eventData);
+                      
+                      handleStreamingEvent(eventData, streamingIssues, currentUrl);
+                      
+                      if (eventData.event_type === 'issue') {
+                        issueCount++;
+                        streamingIssues.push(eventData.issue);
+                      }
+                      
+                    } catch (parseError) {
+                      console.warn('[DEBUG] Failed to parse streaming event:', line, parseError);
+                    }
+                  }
+                }
+                
+                // Continue reading
+                await readStream();
+                
+              } catch (streamError) {
+                clearTimeout(timeoutId);
+                console.error('[DEBUG] Streaming read error:', streamError);
+                
+                if (streamError.name === 'AbortError') {
+                  reject(new Error('Streaming analysis timed out'));
+                } else {
+                  reject(streamError);
+                }
+              }
+            }
+            
+            await readStream();
+            
+          })
+          .catch(error => {
+            clearTimeout(timeoutId);
+            console.error('[DEBUG] Streaming fetch error:', error);
+            reject(error);
+          });
+        });
+      }
+      
+      // Handle individual streaming events
+      function handleStreamingEvent(eventData, streamingIssues, currentUrl) {
+        switch (eventData.event_type) {
+          case 'start':
+            console.log('[DEBUG] Analysis started');
+            updateStreamingProgress(5, eventData.message || 'Analysis started...', 0);
+            break;
+            
+          case 'progress':
+            const percentage = Math.round(eventData.progress_percentage * 100);
+            console.log(`[DEBUG] Progress: ${percentage}%`);
+            updateStreamingProgress(percentage, eventData.current_step, streamingIssues.length);
+            break;
+            
+          case 'issue':
+            console.log('[DEBUG] New issue received:', eventData.issue);
+            handleStreamingIssue(eventData.issue, eventData.issue_index, currentUrl);
+            updateStreamingProgress(
+              Math.min(90, 30 + (streamingIssues.length * 10)), 
+              `Processing issue ${streamingIssues.length + 1}...`,
+              streamingIssues.length + 1
+            );
+            break;
+            
+          case 'complete':
+            console.log('[DEBUG] Analysis complete');
+            updateStreamingProgress(100, eventData.message || 'Analysis complete!', streamingIssues.length);
+            setTimeout(() => hideStreamingProgress(), 1000); // Hide after 1 second
+            break;
+            
+          case 'error':
+            console.error('[DEBUG] Streaming error:', eventData);
+            hideStreamingProgress();
+            showError(eventData.message || 'Streaming analysis failed');
+            break;
+        }
+      }
+      
+      // Update issue count during streaming
+      function updateIssueCount(count) {
+        resultCount.style.display = 'block';
+        const issueText = count === 0 ? 'No issues found yet...' : 
+                         count === 1 ? 'Found 1 potential issue' : 
+                         `Found ${count} potential issues`;
+        resultCount.textContent = issueText;
+      }
+      
+      // Finalize streaming analysis
+      function finalizeStreamingAnalysis(issues) {
+        status.style.display = 'none';
+        celebrateCompletion();
+        
+        // Update final count
+        const issueText = issues.length === 0 ? 'No issues found!' : 
+                         issues.length === 1 ? 'Found 1 potential issue' : 
+                         `Found ${issues.length} potential issues`;
+        resultCount.textContent = issueText;
+        
+        // Re-enable button
+        analyzeBtn.disabled = false;
+        analyzeBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        analyzeBtn.textContent = 'Analysis Complete!';
+        
+        setTimeout(() => {
+          analyzeBtn.style.background = '';
+          analyzeBtn.textContent = 'Analyze This Article';
+        }, 2000);
+      }
+      
+      // Regular analysis fallback
+      async function performRegularAnalysis(article, currentUrl, authToken) {
+        console.log('[DEBUG] Starting regular analysis fallback');
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.log('[DEBUG] AbortController timeout triggered after 120 seconds');
+          controller.abort();
+        }, 120000);
+        
+        console.log('[DEBUG] Starting fetch request to:', config.getApiUrl());
+        
+        return fetch(config.getApiUrl(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Authorization': `Bearer ${authToken}`
+          },
+          credentials: 'omit',
+          body: JSON.stringify(article),
+          signal: controller.signal
+        })
+        .then(async response => {
+          console.log('[DEBUG] Fetch response received:', response.status, response.statusText);
+          if (!response.ok) {
+            // Handle specific error cases
+            if (response.status === 401) {
+              chrome.storage.local.remove(['authToken']);
+              throw new Error('Your session has expired. Please <a href="account.html" target="_blank">sign in again</a>.');
+            } else if (response.status === 403) {
+              const errorData = await response.json();
+              if (errorData.detail && errorData.detail.includes('limit')) {
+                throw new Error('Monthly analysis limit reached. <a href="account.html" target="_blank">Upgrade to Premium</a> for unlimited access.');
+              }
+              throw new Error('Access denied. Please check your account status.');
+            } else if (response.status === 429) {
+              throw new Error('Too many requests. Please wait a moment and try again.');
+            } else {
+              throw new Error(`API error: ${response.status}`);
+            }
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('[DEBUG] Response data received, clearing timeout');
+          clearTimeout(timeoutId);
+          
+          console.log('[DEBUG] Data received:', { issuesCount: data.issues?.length });
+          
+          // Cache the results for this URL
+          cacheResults(currentUrl, data.issues);
+          
+          // Refresh account status to show updated usage
+          loadAccountStatus();
+          
+          // Highlight issues on the page via postMessage
+          window.parent.postMessage({
+            action: 'highlight',
+            issues: data.issues
+          }, '*');
+          
+          // Set up listener for highlight response
+          const highlightHandler = (event) => {
+            if (event.data.action === 'highlightResponse') {
+              window.removeEventListener('message', highlightHandler);
+              console.log('[sidebar.js] Highlight response received:', event.data);
+              
+              if (!event.data.success) {
+                console.warn('Failed to highlight issues on the page.');
+                showResults(data.issues, []);
+              } else {
+                console.log('[sidebar.js] Highlight successful, appliedHighlightsMap:', event.data.appliedHighlightsMap);
+                showResults(data.issues, event.data.appliedHighlightsMap);
+              }
+            }
+          };
+          window.addEventListener('message', highlightHandler);
+          
+          return data.issues;
+        })
+        .catch(error => {
+          console.log('[DEBUG] Fetch error caught:', error.name, error.message);
+          clearTimeout(timeoutId);
+          
+          if (error.name === 'AbortError') {
+            showError('Analysis timed out. The server is taking longer than expected. This might be due to high server load or a complex article. Please try again in a few moments.');
+          } else if (error.message.includes('Failed to fetch')) {
+            showError('Cannot connect to the analysis server. Please check your internet connection and try again.');
+          } else if (error.message.includes('NetworkError')) {
+            showError('Network error occurred. Please check your internet connection and try again.');
+          } else {
+            showError(error.message);
+          }
+          throw error;
+        });
+      }
+
+      // Define performAnalysis function in proper scope - now with streaming support
       async function performAnalysis(article) {
           console.log('[DEBUG] performAnalysis() called');
           
@@ -841,102 +1258,27 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
           
-          // Call the API with enhanced security and authentication
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => {
-            console.log('[DEBUG] AbortController timeout triggered after 120 seconds');
-            controller.abort();
-          }, 120000); // Increased from 60000 to 120000 (120 seconds for LLM processing)
+          // Try streaming analysis first, fallback to regular analysis
+          const streamingSupported = typeof ReadableStream !== 'undefined' && typeof fetch !== 'undefined';
+          console.log('[DEBUG] Streaming supported:', streamingSupported);
           
-          console.log('[DEBUG] Starting fetch request to:', config.getApiUrl());
+          if (streamingSupported) {
+            try {
+              await performStreamingAnalysis(article, currentUrl, authToken);
+              return; // Success, exit function
+            } catch (error) {
+              console.log('[DEBUG] Streaming analysis failed, falling back to regular analysis:', error);
+              // Continue to regular analysis fallback
+            }
+          }
           
-          fetch(config.getApiUrl(), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Requested-With': 'XMLHttpRequest',
-              'Authorization': `Bearer ${authToken}`
-            },
-            credentials: 'omit',
-            body: JSON.stringify(article),
-            signal: controller.signal
-          })
-          .then(async response => {
-            console.log('[DEBUG] Fetch response received:', response.status, response.statusText);
-            if (!response.ok) {
-              // Handle specific error cases
-              if (response.status === 401) {
-                // Clear invalid token
-                chrome.storage.local.remove(['authToken']);
-                throw new Error('Your session has expired. Please <a href="account.html" target="_blank">sign in again</a>.');
-              } else if (response.status === 403) {
-                const errorData = await response.json();
-                if (errorData.detail && errorData.detail.includes('limit')) {
-                  throw new Error('Monthly analysis limit reached. <a href="account.html" target="_blank">Upgrade to Premium</a> for unlimited access.');
-                }
-                throw new Error('Access denied. Please check your account status.');
-              } else if (response.status === 429) {
-                throw new Error('Too many requests. Please wait a moment and try again.');
-              } else {
-                throw new Error(`API error: ${response.status}`);
-              }
-            }
-            return response.json();
-          })
-          .then(data => {
-            console.log('[DEBUG] Response data received, clearing timeout');
-            // Clear the timeout first since we got a successful response
-            clearTimeout(timeoutId);
-            
-            console.log('[DEBUG] Data received:', { issuesCount: data.issues?.length });
-            
-            // Cache the results for this URL
-            cacheResults(currentUrl, data.issues);
-            
-            // Refresh account status to show updated usage
-            loadAccountStatus();
-            
-            // Highlight issues on the page via postMessage
-            window.parent.postMessage({
-              action: 'highlight',
-              issues: data.issues
-            }, '*');
-            
-            // Set up listener for highlight response
-            const highlightHandler = (event) => {
-              if (event.data.action === 'highlightResponse') {
-                window.removeEventListener('message', highlightHandler);
-                console.log('[sidebar.js] Highlight response received:', event.data);
-                
-                if (!event.data.success) {
-                  console.warn('Failed to highlight issues on the page.');
-                  // Show results anyway, but without click functionality  
-                  showResults(data.issues, []);
-                } else {
-                  console.log('[sidebar.js] Highlight successful, appliedHighlightsMap:', event.data.appliedHighlightsMap);
-                  // Show results in sidebar
-                  showResults(data.issues, event.data.appliedHighlightsMap);
-                }
-              }
-            };
-            window.addEventListener('message', highlightHandler);
-          })
-          .catch(error => {
-            console.log('[DEBUG] Fetch error caught:', error.name, error.message);
-            // Clear the timeout on error as well
-            clearTimeout(timeoutId);
-            
-            // More specific error handling
-            if (error.name === 'AbortError') {
-              showError('Analysis timed out. The server is taking longer than expected. This might be due to high server load or a complex article. Please try again in a few moments.');
-            } else if (error.message.includes('Failed to fetch')) {
-              showError('Cannot connect to the analysis server. Please check your internet connection and try again.');
-            } else if (error.message.includes('NetworkError')) {
-              showError('Network error occurred. Please check your internet connection and try again.');
-            } else {
-              showError(error.message);
-            }
-          });
+          // Fallback to regular analysis
+          try {
+            await performRegularAnalysis(article, currentUrl, authToken);
+          } catch (error) {
+            console.log('[DEBUG] Regular analysis also failed:', error);
+            // Error already handled in performRegularAnalysis
+          }
         }
       } // End of continueWithAnalysis function
       

@@ -239,6 +239,70 @@ button:disabled::before {
   border-left-color: #f44336; /* Keep original red border color */
 }
 
+/* Enhanced match quality indicators */
+.issue.exact-match {
+  border-left: 4px solid #10b981;
+  position: relative;
+}
+
+.issue.exact-match::before {
+  content: '●';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #10b981;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.issue.approximate-match {
+  border-left: 4px solid #f59e0b;
+  position: relative;
+  background: linear-gradient(135deg, #fefce8 0%, #ffffff 100%);
+}
+
+.issue.approximate-match::before {
+  content: '≈';
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  color: #f59e0b;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.issue.approximate-match .issue-text {
+  border-left: 3px solid #f59e0b;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, transparent 100%);
+}
+
+/* Enhanced hover effects for clickable issues */
+.issue[data-highlight-id]:not(.issue-not-scrollable) {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.issue[data-highlight-id]:not(.issue-not-scrollable):hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+}
+
+/* Visual feedback animations */
+@keyframes issueClick {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.issue.clicking {
+  animation: issueClick 0.2s ease-out;
+}
+
 .issue-text {
   background: #f9fafb;
   padding: 12px 16px;
@@ -660,5 +724,114 @@ button:disabled::before {
   
   button {
     border: 2px solid #000;
+  }
+}
+
+/* Streaming Progress Indicators */
+.streaming-progress {
+  margin: 16px 0;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-radius: 12px;
+  border: 1px solid #0ea5e9;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0ea5e9 0%, #0284c7 50%, #0369a1 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+  animation: shimmer 2s infinite;
+}
+
+.progress-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.streaming-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.streaming-mode {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0ea5e9;
+  padding: 4px 8px;
+  background: rgba(14, 165, 233, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+.issues-found {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  padding: 4px 8px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+/* Streaming shimmer animation */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Enhanced loading state for streaming */
+.status.streaming {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #0ea5e9;
+  color: #0f172a;
+}
+
+/* Streaming issue animation */
+.issue.streaming-new {
+  animation: streamingSlideIn 0.5s ease-out;
+  border-left: 3px solid #0ea5e9;
+}
+
+@keyframes streamingSlideIn {
+  0% {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
   }
 }
