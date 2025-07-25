@@ -35,6 +35,13 @@ class Settings:
     MAX_PARAGRAPH_CHAR_LENGTH: int = 300
     MIN_CONTENT_LENGTH: int = 100
     
+    # Streaming Configuration
+    ENABLE_STREAMING: bool = True
+    STREAM_CHUNK_SIZE: int = 1024
+    STREAM_TIMEOUT: int = 300  # 5 minutes for streaming
+    STREAM_KEEPALIVE_INTERVAL: int = 30  # Send keepalive every 30 seconds
+    MAX_CONCURRENT_STREAMS: int = 10  # Limit concurrent streaming connections
+    
     # Database Configuration
     DATABASE_NAME: str = "news_fact_checker_db"
     COLLECTION_NAME: str = "article_analyses"

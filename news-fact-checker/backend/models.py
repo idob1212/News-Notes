@@ -3,7 +3,7 @@ Pydantic models for the News Fact-Checker API.
 """
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -26,7 +26,7 @@ class ArticleAnalysisDocument(BaseModel):
     title: str = Field(description="Article title")
     content: str = Field(description="Full article content")
     issues: List[Issue] = Field(description="List of identified issues")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when analysis was created")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Timestamp when analysis was created")
 
 
 class ArticleRequest(BaseModel):
@@ -68,7 +68,7 @@ class User(BaseModel):
     email: EmailStr = Field(description="User email address")
     full_name: Optional[str] = Field(default=None, description="User full name")
     account_type: AccountType = Field(default=AccountType.FREE, description="Account type")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Account creation timestamp")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Account creation timestamp")
     is_active: bool = Field(default=True, description="Whether account is active")
 
 
@@ -78,11 +78,11 @@ class UserDocument(BaseModel):
     full_name: Optional[str] = Field(default=None, description="User full name")
     hashed_password: str = Field(description="Hashed password")
     account_type: AccountType = Field(default=AccountType.FREE, description="Account type")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Account creation timestamp")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Account creation timestamp")
     is_active: bool = Field(default=True, description="Whether account is active")
     # Usage tracking for free accounts
     monthly_usage: int = Field(default=0, description="Articles analyzed this month")
-    usage_reset_date: datetime = Field(default_factory=datetime.utcnow, description="When usage counter resets")
+    usage_reset_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When usage counter resets")
     analyzed_articles: List[str] = Field(default_factory=list, description="URLs of articles this user has analyzed")
     # Paddle integration
     paddle_customer_id: Optional[str] = Field(default=None, description="Paddle customer ID")
@@ -136,4 +136,57 @@ class SubscriptionConfirmationResponse(BaseModel):
     """Model for subscription confirmation response."""
     success: bool = Field(description="Whether confirmation was successful")
     message: str = Field(description="Confirmation message")
-    account_type: AccountType = Field(description="Updated account type") 
+    account_type: AccountType = Field(description="Updated account type")
+
+
+# Streaming models for real-time analysis
+
+class StreamEventType(str, Enum):
+    """Enum for different types of streaming events."""
+    START = "start"
+    PROGRESS = "progress"
+    ISSUE = "issue"
+    COMPLETE = "complete"
+    ERROR = "error"
+
+
+class StreamEvent(BaseModel):
+    """Base model for streaming events."""
+    event_type: StreamEventType = Field(description="Type of streaming event")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Event timestamp")
+    message: Optional[str] = Field(default=None, description="Optional message")
+
+
+class AnalysisProgress(StreamEvent):
+    """Model for analysis progress updates."""
+    event_type: StreamEventType = Field(default=StreamEventType.PROGRESS, description="Event type")
+    progress_percentage: float = Field(description="Analysis completion percentage (0.0-1.0)")
+    current_step: str = Field(description="Current analysis step description")
+
+
+class StreamedIssue(StreamEvent):
+    """Model for streaming individual issues as they're found."""
+    event_type: StreamEventType = Field(default=StreamEventType.ISSUE, description="Event type")
+    issue: Issue = Field(description="The identified issue")
+    issue_index: int = Field(description="Sequential index of this issue")
+
+
+class AnalysisStart(StreamEvent):
+    """Model for analysis start event."""
+    event_type: StreamEventType = Field(default=StreamEventType.START, description="Event type")
+    article_url: str = Field(description="URL of the article being analyzed")
+    estimated_duration: Optional[int] = Field(default=None, description="Estimated analysis duration in seconds")
+
+
+class AnalysisComplete(StreamEvent):
+    """Model for analysis completion event."""
+    event_type: StreamEventType = Field(default=StreamEventType.COMPLETE, description="Event type")
+    total_issues: int = Field(description="Total number of issues found")
+    analysis_duration: float = Field(description="Actual analysis duration in seconds")
+
+
+class AnalysisError(StreamEvent):
+    """Model for analysis error event."""
+    event_type: StreamEventType = Field(default=StreamEventType.ERROR, description="Event type")
+    error_code: str = Field(description="Error code for client handling")
+    error_details: Optional[str] = Field(default=None, description="Detailed error information") 
